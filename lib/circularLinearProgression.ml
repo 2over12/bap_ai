@@ -17,7 +17,10 @@ end
 
 include T
 include Comparable.Make(T)
-let comp_size (c: t) = (Z.pow  (Z.succ Z.one) c.width)
+let comp_size_with_modifier (c:t) (modif: int) = (Z.pow  (Z.succ Z.one) (c.width+ modif))
+
+let comp_size (c: t) = comp_size_with_modifier c 0
+
 let comp_k (c: t) = if Z.equal c.step Z.zero then Z.one else Z.div (Z.lcm (Z.abs c.step) (comp_size c)) (Z.abs c.step)
 
 let create ~width:(width:int) ~step:(step:Z.t) ~card:(card:Z.t) (base:Z.t) = {width=width;step=step; base=base;card=card} 
@@ -63,6 +66,7 @@ let new_basei = Z.sub cl.card ib in
   Z.erem (Z.add cl.base (Z.mul cl.step new_basei)) cl_size
 
 
+let compute_last_val (c:t) = Z.erem (Z.add c.base (Z.mul c.step (Z.sub c.card Z.one))) (comp_size c)
 
 let canonize (c: t) =
   let k = comp_k c in
@@ -74,4 +78,9 @@ let canonize (c: t) =
       {base=min_uelem c gap;step=gap;card=k;width=c.width}
 
     | z when Z.equal c.card (Z.sub k Z.one) && Z.geq c.card (Z.succ Z.one)  -> {width=c.width;step=gap;card=c.card;base=get_first_elem c}
-    | _ -> raise (Failure "Not Implemented Yet")
+    | _ -> let sz = (comp_size c) in 
+           let s' = Z.erem c.step sz in if Z.lt s' (comp_size_with_modifier c (-1)) 
+            then {base=Z.erem c.base sz;step=s';card=c.card;width=c.width} 
+          else 
+            let neg_strid = Z.sub sz s' in 
+            let last_val = compute_last_val c in {width=c.width;step=neg_strid;card=c.card;base=last_val}
