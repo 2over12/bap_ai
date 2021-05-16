@@ -1,0 +1,8 @@
+(executable
+ (name run_vsa)
+  (libraries bap core_kernel))
+
+(env
+ (dev
+  (flags
+   (:standard -w -33-27))))

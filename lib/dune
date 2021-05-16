@@ -1,0 +1,10 @@
+(library
+ (name bap_ai)
+ (public_name bap_ai)
+  (modules circularLinearProgression mapDomain abstractDomain)
+ (libraries bap core_kernel zarith)
+ (preprocess (pps ppx_jane)))
+(env
+ (dev
+  (flags
+   (:standard -w -33-27-11-26))))
