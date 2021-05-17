@@ -20,11 +20,24 @@ let test_canon_caseb _ =
 let test_canon_casec _ = 
   let s = CircularLinearProgression.create ~width:8 ~step:(Z.of_int 132) ~card:(Z.of_int 7) (Z.of_int 90) in 
   assert_equal ~printer:clp_printer (CircularLinearProgression.create  ~width:8 ~step:(Z.of_int 124) ~card:(Z.of_int 7) (Z.of_int 114)) (CircularLinearProgression.canonize s)
-let suite =
+
+  let test_calculate_gap_ncanon _ = let res = CircularLinearProgression.compute_gap_width (ex_clp 15) in assert_equal (Z.of_int 11,Z.of_int 5, Z.of_int 16, Z.of_int 16) res
+
+  let test_calculate_gap_ex_ncanon _ = let res = CircularLinearProgression.compute_gap_width_ex (ex_clp 15) Z.zero in assert_equal (Z.of_int 11,Z.of_int 5,  Z.one, Z.of_int 16, Z.of_int 16, Z.of_int 8) res
+
+  let test_calculate_gap_ex_ncanonother _ = let res = CircularLinearProgression.compute_gap_width_ex (ex_clp 15) (Z.of_int 91) in assert_equal (Z.of_int 11,Z.of_int 5,  (Z.of_int 3), Z.of_int 16, Z.of_int 16, Z.of_int 13) res
+
+  let test_calculate_gap_ex_on_point _ = let res = CircularLinearProgression.compute_gap_width_ex (ex_clp 15) (Z.of_int 216) in assert_equal (Z.of_int 11,Z.of_int 5,  (Z.of_int 0), Z.of_int 16, Z.of_int 16, Z.of_int 0) res
+
+  let suite =
   "Test CLPs" >::: [
     "test_canon_casea" >:: test_canon_casea;
     "test_canon_caseb" >:: test_canon_caseb;
-    "test_canon_casec" >:: test_canon_casec
+    "test_canon_casec" >:: test_canon_casec;
+    "test_calculate_gap_ncanon" >:: test_calculate_gap_ncanon;
+    "test_calculate_gap_ex_ncanon" >:: test_calculate_gap_ex_ncanon;
+    "let test_calculate_gap_ex_ncanonother" >::test_calculate_gap_ex_ncanonother;
+    "let test_calculate_gap_ex_ncanonother" >:: test_calculate_gap_ex_on_point
   ]
 
 let () =

@@ -84,3 +84,92 @@ let canonize (c: t) =
           else 
             let neg_strid = Z.sub sz s' in 
             let last_val = compute_last_val c in {width=c.width;step=neg_strid;card=c.card;base=last_val}
+
+
+let num_steps_leq_n n from by = Z.fdiv (Z.sub n from) by
+
+let num_steps_leq_nsub1 n from by = num_steps_leq_n (Z.sub n Z.one) from by
+
+let num_steps_geq0 from step = Z.fdiv from step
+
+let num_steps_gt0 from step = num_steps_geq0 (Z.sub from Z.one)  step
+
+let shrink ind_constraint gap_constraint n i_shrink g_shrink i_by g_by = 
+  let k = Z.min (ind_constraint n i_shrink i_by) (gap_constraint g_shrink g_by) in
+  let i' = Z.add i_shrink (Z.mul k i_by) in 
+  let g' = Z.sub g_shrink (Z.mul k g_by) in 
+  (i', g') 
+
+let shrink_to_gap_0 = shrink num_steps_leq_nsub1 num_steps_geq0
+
+let shrink_to_gap_gt0 = shrink num_steps_leq_nsub1 num_steps_gt0
+
+let compute_index_value (c:t) i = let sz = comp_size c in (Z.erem (Z.add c.base (Z.mul i c.step)) sz)
+
+(* needs to be in canonical form *)
+
+(*
+let compute_gap_width (c:t) = 
+    let sz = comp_size c in 
+    let rec compute_gap_width' ia ib alpha beta = 
+      
+      if Z.geq (Z.add ia ib) c.card 
+        then 
+          (*base case*)
+          (ia, ib, alpha, beta)
+        else
+          if Z.lt alpha beta then
+            let (ib',beta') = shrink_to_gap_gt0 c.card ib beta ia alpha in
+            compute_gap_width' ia ib' alpha beta'
+          else 
+          let (ia',alpha') = shrink_to_gap_gt0 c.card ia alpha ib beta  in
+            compute_gap_width' ia' ib alpha' beta
+        in 
+    if Z.equal c.card Z.one then (Z.zero,Z.zero,sz,sz) else compute_gap_width' Z.one Z.one c.step (Z.sub sz c.step)
+*)
+
+
+let compute_gap_width_ex (c:t) (l: Z.t) = 
+  let sz = comp_size c in 
+  let rec compute_gap_width_ex' ia ib ic alpha beta zeta = 
+    
+    if Z.geq (Z.add ia ib) c.card 
+      then 
+        (*base case*)
+        (ia, ib, ic, alpha, beta, zeta)
+      else
+        if Z.lt alpha beta then
+          let (ic',zeta') = 
+            let k' = Z.cdiv (Z.neg (Z.sub zeta beta)) alpha in 
+            (* if shifting wont move n past n-1 and shifting will actually move the gap negative*)
+            if (Z.leq k' (num_steps_leq_nsub1 c.card (Z.add ib ic) ia)) && 
+              Z.lt (Z.add (Z.neg beta) (Z.mul k' alpha)) Z.zero then
+                let nic = Z.add (Z.add ic ib) (Z.mul k' ia) in
+                let nzeta = (Z.add (Z.sub zeta beta) (Z.mul k' alpha)) in 
+                (nic,nzeta)
+          else
+              (ic,zeta)   
+        in
+          let (ib',beta') = shrink_to_gap_gt0 c.card ib beta ia alpha in
+          compute_gap_width_ex' ia ib' ic' alpha beta' zeta'
+        else 
+        let (ic', zeta')  = shrink_to_gap_0 c.card ic zeta ib beta in
+        let (ia',alpha') = shrink_to_gap_gt0 c.card ia alpha ib beta  in
+        compute_gap_width_ex' ia' ib ic' alpha' beta zeta'
+      in 
+  if Z.equal c.card Z.one 
+    then 
+      (Z.zero,Z.zero,Z.zero,sz,sz,Z.erem (Z.sub c.base l) sz)
+  else 
+    let candidate_zeta_ind0 =  (Z.erem (Z.sub c.base l) sz)  in 
+    let candidate_zeta_ind1 = (Z.erem (Z.sub (compute_index_value c Z.one) l) sz)in 
+    let (ic, zeta) = 
+    if Z.lt candidate_zeta_ind0 candidate_zeta_ind1 then 
+      (Z.zero,candidate_zeta_ind0)
+    else 
+      (Z.one, candidate_zeta_ind1)
+  in   
+    compute_gap_width_ex' Z.one Z.one ic c.step (Z.sub sz c.step) zeta
+
+
+    let compute_gap_width (c:t) = let (ia,ib,_,alpha,beta,_) = compute_gap_width_ex c Z.zero in (ia,ib,alpha,beta)
