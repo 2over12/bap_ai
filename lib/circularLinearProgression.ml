@@ -11,6 +11,13 @@ type t =  {
   width: int
 } [@@deriving compare]
 
+(* TODO add phantom type for canon representations
+
+
+
+
+*)
+
   let sexp_of_t (v:t)  = Sexp.List [Sexp.Atom (Z.to_string v.base); Sexp.Atom (Z.to_string v.step); Sexp.Atom (Z.to_string v.card); Sexp.Atom (Int.to_string v.width)]
   let t_of_sexp (v:Sexp.t) = raise (Failure "") (* TODO parse the thing*)
 end
@@ -129,47 +136,57 @@ let compute_gap_width (c:t) =
 *)
 
 
+type computed_clp_facts = {ia:Z.t;alpha:Z.t; ib:Z.t; beta: Z.t}
+
 let compute_gap_width_ex (c:t) (l: Z.t) = 
-  let sz = comp_size c in 
-  let rec compute_gap_width_ex' ia ib ic alpha beta zeta = 
-    
-    if Z.geq (Z.add ia ib) c.card 
-      then 
-        (*base case*)
-        (ia, ib, ic, alpha, beta, zeta)
-      else
-        if Z.lt alpha beta then
-          let (ic',zeta') = 
-            let k' = Z.cdiv (Z.neg (Z.sub zeta beta)) alpha in 
-            (* if shifting wont move n past n-1 and shifting will actually move the gap negative*)
-            if (Z.leq k' (num_steps_leq_nsub1 c.card (Z.add ib ic) ia)) && 
-              Z.lt (Z.add (Z.neg beta) (Z.mul k' alpha)) Z.zero then
-                let nic = Z.add (Z.add ic ib) (Z.mul k' ia) in
-                let nzeta = (Z.add (Z.sub zeta beta) (Z.mul k' alpha)) in 
-                (nic,nzeta)
-          else
-              (ic,zeta)   
-        in
-          let (ib',beta') = shrink_to_gap_gt0 c.card ib beta ia alpha in
-          compute_gap_width_ex' ia ib' ic' alpha beta' zeta'
+  let (ia,ib,ic,alpha,beta,zeta) = 
+    let sz = comp_size c in 
+    let rec compute_gap_width_ex' ia ib ic alpha beta zeta = 
+      
+      if Z.geq (Z.add ia ib) c.card 
+        then 
+          (*base case*)
+          (ia, ib, ic, alpha, beta, zeta)
+        else
+          if Z.lt alpha beta then
+            let (ic',zeta') = 
+              let k' = Z.cdiv (Z.neg (Z.sub zeta beta)) alpha in 
+              (* if shifting wont move n past n-1 and shifting will actually move the gap negative*)
+              if (Z.leq k' (num_steps_leq_nsub1 c.card (Z.add ib ic) ia)) && 
+                Z.lt (Z.add (Z.neg beta) (Z.mul k' alpha)) Z.zero then
+                  let nic = Z.add (Z.add ic ib) (Z.mul k' ia) in
+                  let nzeta = (Z.add (Z.sub zeta beta) (Z.mul k' alpha)) in 
+                  (nic,nzeta)
+            else
+                (ic,zeta)   
+          in
+            let (ib',beta') = shrink_to_gap_gt0 c.card ib beta ia alpha in
+            compute_gap_width_ex' ia ib' ic' alpha beta' zeta'
+          else 
+          let (ic', zeta')  = shrink_to_gap_0 c.card ic zeta ib beta in
+          let (ia',alpha') = shrink_to_gap_gt0 c.card ia alpha ib beta  in
+          compute_gap_width_ex' ia' ib ic' alpha' beta zeta'
+        in 
+      if Z.equal c.card Z.one 
+        then 
+          (Z.zero,Z.zero,Z.zero,sz,sz,Z.erem (Z.sub c.base l) sz)
+      else 
+        let candidate_zeta_ind0 =  (Z.erem (Z.sub c.base l) sz)  in 
+        let candidate_zeta_ind1 = (Z.erem (Z.sub (compute_index_value c Z.one) l) sz)in 
+        let (ic, zeta) = 
+        if Z.lt candidate_zeta_ind0 candidate_zeta_ind1 then 
+          (Z.zero,candidate_zeta_ind0)
         else 
-        let (ic', zeta')  = shrink_to_gap_0 c.card ic zeta ib beta in
-        let (ia',alpha') = shrink_to_gap_gt0 c.card ia alpha ib beta  in
-        compute_gap_width_ex' ia' ib ic' alpha' beta zeta'
-      in 
-  if Z.equal c.card Z.one 
-    then 
-      (Z.zero,Z.zero,Z.zero,sz,sz,Z.erem (Z.sub c.base l) sz)
-  else 
-    let candidate_zeta_ind0 =  (Z.erem (Z.sub c.base l) sz)  in 
-    let candidate_zeta_ind1 = (Z.erem (Z.sub (compute_index_value c Z.one) l) sz)in 
-    let (ic, zeta) = 
-    if Z.lt candidate_zeta_ind0 candidate_zeta_ind1 then 
-      (Z.zero,candidate_zeta_ind0)
-    else 
-      (Z.one, candidate_zeta_ind1)
-  in   
-    compute_gap_width_ex' Z.one Z.one ic c.step (Z.sub sz c.step) zeta
+          (Z.one, candidate_zeta_ind1)
+      in   
+  compute_gap_width_ex' Z.one Z.one ic c.step (Z.sub sz c.step) zeta in {ia=ia;ib=ib;alpha=alpha;beta=beta},(ic,zeta)
+   
+let compute_gap_width (c:t) = let (a,_) = compute_gap_width_ex c Z.zero in a 
 
 
-    let compute_gap_width (c:t) = let (ia,ib,_,alpha,beta,_) = compute_gap_width_ex c Z.zero in (ia,ib,alpha,beta)
+
+
+  (**must be canonical
+  *)
+  (**
+  let split_clp_by (c:t) (x: Z.t) = let (compute_gap_width_ex**)
