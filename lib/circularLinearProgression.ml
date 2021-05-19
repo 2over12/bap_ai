@@ -2,38 +2,41 @@ open Core_kernel
 open Bap.Std
 module W = Word
 
+type canon
+type generic
+type alp
 
-module T = struct 
-type t =  {
+type 'a t =  {
   base: Z.t;
   step: Z.t; 
   card: Z.t;
   width: int
 } [@@deriving compare]
 
-(* TODO add phantom type for canon representations
+type 'a t' = 'a t
+let sexp_of_t (v: 'a t)  = Sexp.List [Sexp.Atom (Z.to_string v.base); Sexp.Atom (Z.to_string v.step); Sexp.Atom (Z.to_string v.card); Sexp.Atom (Int.to_string v.width)]
+let t_of_sexp (v:Sexp.t) = raise (Failure "") (* TODO parse the thing*)
+
+
+include Comparable.Make(struct 
+  type t =  canon t' 
+
+  let sexp_of_t = sexp_of_t
+  let t_of_sexp = t_of_sexp
+
+  let compare = compare (fun _ _ -> 0)
+end)
+
+
+let comp_size_with_modifier (c: 'a t) (modif: int) = (Z.pow  (Z.succ Z.one) (c.width+ modif))
+
+let comp_size (c: 'a t) = comp_size_with_modifier c 0
+
+let comp_k (c: 'a t) = if Z.equal c.step Z.zero then Z.one else Z.div (Z.lcm (Z.abs c.step) (comp_size c)) (Z.abs c.step)
 
 
 
-
-*)
-
-  let sexp_of_t (v:t)  = Sexp.List [Sexp.Atom (Z.to_string v.base); Sexp.Atom (Z.to_string v.step); Sexp.Atom (Z.to_string v.card); Sexp.Atom (Int.to_string v.width)]
-  let t_of_sexp (v:Sexp.t) = raise (Failure "") (* TODO parse the thing*)
-end
-
-include T
-include Comparable.Make(T)
-let comp_size_with_modifier (c:t) (modif: int) = (Z.pow  (Z.succ Z.one) (c.width+ modif))
-
-let comp_size (c: t) = comp_size_with_modifier c 0
-
-let comp_k (c: t) = if Z.equal c.step Z.zero then Z.one else Z.div (Z.lcm (Z.abs c.step) (comp_size c)) (Z.abs c.step)
-
-let create ~width:(width:int) ~step:(step:Z.t) ~card:(card:Z.t) (base:Z.t) = {width=width;step=step; base=base;card=card} 
-
-
-let min_uelem (c: t) gap_size = Z.erem (Z.erem c.base gap_size) (comp_size c)
+let min_uelem (c: 'a t) gap_size = Z.erem (Z.erem c.base gap_size) (comp_size c)
 
 
 (*
@@ -61,7 +64,7 @@ by eq 6.2 the elements with gab alpha+beta (the big gap) must be greater than or
 so first_elem = n-ib 
 *)
 
-let get_first_elem (cl:t) =
+let get_first_elem (cl:'a t) =
 let cl_size = comp_size cl in
 let(_,x_for_ia,_) =  Z.gcdext cl.step cl_size in 
 (* since we want the solution for -si = gcd(s,y) and we just got the solution for si=gcd(s,y) we need to invert*)
@@ -73,9 +76,9 @@ let new_basei = Z.sub cl.card ib in
   Z.erem (Z.add cl.base (Z.mul cl.step new_basei)) cl_size
 
 
-let compute_last_val (c:t) = Z.erem (Z.add c.base (Z.mul c.step (Z.sub c.card Z.one))) (comp_size c)
+let compute_last_val (c:'a t) = Z.erem (Z.add c.base (Z.mul c.step (Z.sub c.card Z.one))) (comp_size c)
 
-let canonize (c: t) =
+let canonize (c: 'a t) =
   let k = comp_k c in
   let gap = Z.gcd c.step (comp_size c) in
   match c.card with
@@ -90,8 +93,11 @@ let canonize (c: t) =
             then {base=Z.erem c.base sz;step=s';card=c.card;width=c.width} 
           else 
             let neg_strid = Z.sub sz s' in 
-            let last_val = compute_last_val c in {width=c.width;step=neg_strid;card=c.card;base=last_val}
+            let last_val = compute_last_val c in ({width=c.width;step=neg_strid;card=c.card;base=last_val}: canon t)
 
+
+
+let create ~width:(width:int) ~step:(step:Z.t) ~card:(card:Z.t) (base:Z.t) = canonize {width=width;step=step; base=base;card=card}
 
 let num_steps_leq_n n from by = Z.fdiv (Z.sub n from) by
 
@@ -111,34 +117,28 @@ let shrink_to_gap_0 = shrink num_steps_leq_nsub1 num_steps_geq0
 
 let shrink_to_gap_gt0 = shrink num_steps_leq_nsub1 num_steps_gt0
 
-let compute_index_value (c:t) i = let sz = comp_size c in (Z.erem (Z.add c.base (Z.mul i c.step)) sz)
 
-(* needs to be in canonical form *)
 
-(*
-let compute_gap_width (c:t) = 
-    let sz = comp_size c in 
-    let rec compute_gap_width' ia ib alpha beta = 
-      
-      if Z.geq (Z.add ia ib) c.card 
-        then 
-          (*base case*)
-          (ia, ib, alpha, beta)
-        else
-          if Z.lt alpha beta then
-            let (ib',beta') = shrink_to_gap_gt0 c.card ib beta ia alpha in
-            compute_gap_width' ia ib' alpha beta'
-          else 
-          let (ia',alpha') = shrink_to_gap_gt0 c.card ia alpha ib beta  in
-            compute_gap_width' ia' ib alpha' beta
-        in 
-    if Z.equal c.card Z.one then (Z.zero,Z.zero,sz,sz) else compute_gap_width' Z.one Z.one c.step (Z.sub sz c.step)
-*)
 
+let compute_index_value_without_mod (c: 'a t) i = (Z.add c.base (Z.mul i c.step))
+
+let compute_index_value (c: 'a t) i = let sz = comp_size c in (Z.erem (Z.add c.base (Z.mul i c.step)) sz)
+
+let compute_signed_index_value (c: 'a t) i = let sz = comp_size c in
+  let pval =  compute_index_value_without_mod c i in 
+  let modded_pos = Z.erem pval sz in 
+    if (Z.lt modded_pos (comp_size_with_modifier c (-1))) then modded_pos else
+      Z.sub modded_pos sz
+
+ 
 
 type computed_clp_facts = {ia:Z.t;alpha:Z.t; ib:Z.t; beta: Z.t}
+let sexp_of_clp_facts (v: computed_clp_facts)  = Sexp.List [Sexp.Atom (Z.to_string v.ia); Sexp.Atom (Z.to_string v.ib); Sexp.Atom (Z.to_string v.alpha); Sexp.Atom (Z.to_string v.beta)]
+let clp_facts_of_sexp (v:Sexp.t) = raise (Failure "") (* TODO parse the thing*)
 
-let compute_gap_width_ex (c:t) (l: Z.t) = 
+
+
+let compute_gap_width_ex (c: canon t) (l: Z.t) = 
   let (ia,ib,ic,alpha,beta,zeta) = 
     let sz = comp_size c in 
     let rec compute_gap_width_ex' ia ib ic alpha beta zeta = 
@@ -181,12 +181,51 @@ let compute_gap_width_ex (c:t) (l: Z.t) =
       in   
   compute_gap_width_ex' Z.one Z.one ic c.step (Z.sub sz c.step) zeta in {ia=ia;ib=ib;alpha=alpha;beta=beta},(ic,zeta)
    
-let compute_gap_width (c:t) = let (a,_) = compute_gap_width_ex c Z.zero in a 
+let compute_gap_width (c:canon t) = let (a,_) = compute_gap_width_ex c Z.zero in a 
 
 
+
+let pred (c: canon t) (gaps: computed_clp_facts) (i: Z.t) = 
+    if Z.lt i (Z.sub c.card gaps.ib) then (Z.add i gaps.ib) else 
+      if Z.leq gaps.ia i then (Z.sub i gaps.ia) else
+        (Z.add (Z.sub i gaps.ia) gaps.ib)
+
+
+let succ (c: canon t) (gaps: computed_clp_facts) (i: Z.t) = 
+  if Z.lt i (Z.sub c.card gaps.ia) then (Z.add i gaps.ia) else 
+    if Z.leq gaps.ib i then (Z.sub i gaps.ib) else
+      (Z.sub (Z.add i gaps.ia) gaps.ib)
 
 
   (**must be canonical
   *)
-  (**
-  let split_clp_by (c:t) (x: Z.t) = let (compute_gap_width_ex**)
+
+  let rec repeat_while f x g = if g x then x :: repeat_while f (f x) g else []
+  
+
+  let gap_length_from from_v towi (c: 'a t)  index_to_value = let sz= comp_size c in 
+                                              let tow_v = index_to_value c towi  in 
+                                              Z.erem (Z.sub tow_v from_v) sz
+
+
+  let compute_lap (c: canon t) (wrapping_point: Z.t) index_to_value (lap_start_i: Z.t) = 
+    let lap_start_v = index_to_value c lap_start_i in 
+    let max_step_num = Z.fdiv (Z.sub wrapping_point lap_start_v) c.step in 
+    let  lap_end_i = Z.min (Z.sub c.card Z.one) (Z.add lap_start_i max_step_num) in
+      ({card=(Z.add (Z.sub lap_end_i lap_start_i) Z.one);width=c.width;base=lap_start_v;step=c.step}:alp t) 
+
+  (**x' is the last valid value before wrapping*)
+  let split_clp_by (c:canon t) (x': Z.t) index_to_value = 
+      let sz = comp_size c in
+      let x = Z.erem x' sz in 
+      let (gaps,(ic,zeta)) = compute_gap_width_ex c x in
+      let lst_of_start_bounds' = repeat_while (succ c gaps) ic (fun ind -> (Z.leq (gap_length_from x ind c index_to_value) c.step)) in 
+      let lst_of_start_bounds = if List.find lst_of_start_bounds' ~f:(fun ind -> Z.equal ind Z.zero) |> Option.is_some then lst_of_start_bounds' else Z.zero::lst_of_start_bounds' in
+      List.map ~f:(compute_lap c x index_to_value) lst_of_start_bounds
+
+let signed_alps (c:canon t) = 
+  let wval = comp_size_with_modifier c (-1) |> Z.pred in 
+  split_clp_by c wval compute_signed_index_value
+
+let unsigned_alps (c:canon t) = let sz = Z.pred (comp_size c) in 
+ split_clp_by c sz compute_index_value
