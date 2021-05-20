@@ -2,7 +2,7 @@
  (name bap_ai)
  (public_name bap_ai)
   (modules circularLinearProgression mapDomain abstractDomain)
- (libraries bap core_kernel zarith)
+ (libraries bap oseq core_kernel zarith)
  (preprocess (pps ppx_jane)))
 (env
  (dev

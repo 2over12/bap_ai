@@ -223,9 +223,76 @@ let succ (c: canon t) (gaps: computed_clp_facts) (i: Z.t) =
       let lst_of_start_bounds = if List.find lst_of_start_bounds' ~f:(fun ind -> Z.equal ind Z.zero) |> Option.is_some then lst_of_start_bounds' else Z.zero::lst_of_start_bounds' in
       List.map ~f:(compute_lap c x index_to_value) lst_of_start_bounds
 
-let signed_alps (c:canon t) = 
+ 
+ let estimate_number_of_alps (c: canon t) = Z.cdiv (Z.mul c.step c.card) (comp_size c)
+
+ let visit_number_circle (c: canon t) (starting_index: Z.t) = 
+  let facts = compute_gap_width c in 
+  let rec run_visit curr_ind n  _ = if Z.geq n c.card then OSeq.Nil else OSeq.Cons (curr_ind, run_visit (succ c facts curr_ind) (Z.succ n)) in run_visit starting_index Z.zero
+
+
+(* groups should be such that the gap lengths to pred are equal and the two points do not cross the wrapping point*)
+
+
+let get_succesor_gap_length (c:canon t) (gap_info: computed_clp_facts) (i: Z.t) =
+  if (Z.lt i (Z.sub c.card gap_info.ia)) then gap_info.alpha
+  else if (Z.leq gap_info.ib i) then gap_info.beta else
+    Z.add gap_info.beta gap_info.alpha
+
+let get_pred_gap_length (c:canon t) (gap_info: computed_clp_facts) (i: Z.t) = 
+    if Z.lt i (Z.sub c.card gap_info.ib) then gap_info.beta else
+      if Z.leq gap_info.ia i then gap_info.alpha else 
+        Z.add gap_info.beta gap_info.alpha
+
+let group_consecutive (gap_info: computed_clp_facts) (c: canon t) (seq: Z.t OSeq.t) = 
+  let rec grouper (sub_seq: Z.t OSeq.t) () = 
+    match sub_seq () with 
+      | OSeq.Nil -> OSeq.Nil 
+      | OSeq.Cons (x,rst) -> let xlen = get_succesor_gap_length c gap_info x in
+        let matching_items i = Z.equal (get_pred_gap_length c gap_info i ) xlen in
+       let group = OSeq.cons x (OSeq.take_while matching_items rst) in 
+       OSeq.Cons (group,(grouper (OSeq.drop_while matching_items rst)))
+    in grouper seq
+
+
+
+  let rec take_big_int (i: Z.t) (seq: 'a OSeq.t) () = 
+    if Z.leq i Z.zero then OSeq.Nil else 
+      let curr_node = seq () in 
+          match curr_node with 
+            OSeq.Nil -> OSeq.Nil
+          | OSeq.Cons (x,rst) -> OSeq.Cons (x, take_big_int (Z.pred i) rst)
+
+
+  let slow_alps_strategy  (c: canon t) (wrapping_point: Z.t) (index_to_value: canon t -> Z.t -> Z.t) (alp_limit: Z.t) = 
+    let (gap_info, (ic,zeta)) = compute_gap_width_ex c wrapping_point in 
+    (* we start our visit from the index immediately after the wrapping point so that we never have to wrap*)
+    let ind_seq = visit_number_circle c ic in
+    let alp_groups = group_consecutive gap_info c ind_seq in
+    let limited_groups = take_big_int alp_limit alp_groups in
+    let make_alp_from_group (grp: Z.t OSeq.t) = 
+      let grp_lst = OSeq.to_list grp in 
+      let base_index = List.hd_exn grp_lst in 
+      let card = List.length grp_lst |> Z.of_int in (*todo the list could be too long*)
+      let step = get_succesor_gap_length c gap_info base_index in 
+        ({step=step;card=card;width=c.width; base=index_to_value c base_index}: alp t) in
+    let all_alps = OSeq.map make_alp_from_group limited_groups in 
+    let total_card = OSeq.fold (fun acc current_alp -> Z.add acc (current_alp.card)) Z.zero all_alps in 
+      if Z.equal total_card c.card then Some all_alps else None
+  
+
+
+let get_alps  (c:canon t) (wrapping_point: Z.t) index_to_value =
+      let alp_limit = estimate_number_of_alps c in
+      let slow_alps = slow_alps_strategy c wrapping_point index_to_value alp_limit in
+      match slow_alps with 
+        None -> split_clp_by c wrapping_point index_to_value
+        | Some a -> OSeq.to_list a
+
+let signed_alps (c:canon t) =  
   let wval = comp_size_with_modifier c (-1) |> Z.pred in 
-  split_clp_by c wval compute_signed_index_value
+get_alps c wval compute_signed_index_value
+
 
 let unsigned_alps (c:canon t) = let sz = Z.pred (comp_size c) in 
- split_clp_by c sz compute_index_value
+ get_alps c sz compute_index_value
