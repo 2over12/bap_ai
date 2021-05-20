@@ -45,6 +45,24 @@ let test_canon_casec _ =
       create_alp ~width:8 ~card:(Z.of_int 3) ~step:(Z.of_int 30) (Z.of_int 60);
       create_alp ~width:8 ~card:(Z.of_int 7) ~step:(Z.of_int 30) (Z.of_int (-106));
     ] alps  
+
+
+    let test_slow_alp_split_signed _ = let start_clp =  CircularLinearProgression.create ~width:8 ~card:(Z.of_int 20) ~step:(Z.of_int 124) (Z.of_int 10) in
+    let alps = CircularLinearProgression.signed_alps start_clp in assert_equal ~printer:(fun x -> List.map ~f:clp_printer x |> List.fold ~init:"" ~f:(fun accum x -> accum ^ "|"^x)) [
+      create_alp ~width:8 ~card:(Z.of_int 2) ~step:(Z.of_int 60) (Z.of_int (-122));
+      create_alp ~width:8 ~card:(Z.of_int 9) ~step:(Z.of_int 8) (Z.of_int (-54));
+      create_alp ~width:8 ~card:(Z.of_int 9) ~step:(Z.of_int 8) (Z.of_int 62);
+    ] alps  
+
+
+
+    let test_slow_alp_split_unsigned _ = let start_clp =  CircularLinearProgression.create ~width:8 ~card:(Z.of_int 20) ~step:(Z.of_int 124) (Z.of_int 10) in
+    let alps = CircularLinearProgression.unsigned_alps start_clp in assert_equal ~printer:(fun x -> List.map ~f:clp_printer x |> List.fold ~init:"" ~f:(fun accum x -> accum ^ "|"^x)) [
+      create_alp ~width:8 ~card:(Z.of_int 2) ~step:(Z.of_int 8) (Z.of_int 2);
+      create_alp ~width:8 ~card:(Z.of_int 10) ~step:(Z.of_int 8) (Z.of_int 62);
+      create_alp ~width:8 ~card:(Z.of_int 8) ~step:(Z.of_int 8) (Z.of_int 194);
+    ] alps  
+
   let suite =
   "Test CLPs" >::: [
     "test_canon_casea" >:: test_canon_casea;
@@ -55,7 +73,9 @@ let test_canon_casec _ =
     "test_calculate_gap_ex_ncanonother" >::test_calculate_gap_ex_ncanonother;
     "test_calculate_gap_ex_ncanonother" >:: test_calculate_gap_ex_on_point;
     "test_incision_alp_split" >:: test_incision_alp_split;
-    "test_incision_alp_split_signed" >:: test_incision_alp_split_signed
+    "test_incision_alp_split_signed" >:: test_incision_alp_split_signed;
+    "test_slow_alp_split_signed" >:: test_slow_alp_split_signed;
+    "test_slow_alp_split_unsigned" >:: test_slow_alp_split_unsigned
   ]
 
 let () =
