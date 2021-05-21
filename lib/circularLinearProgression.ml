@@ -354,3 +354,12 @@ let intersection (c1: canon t) (c2: canon t) = if is_bottom c1 && is_bottom c2 t
       let s = Z.mul c1.step gcd_factor in 
       let n = Z.fdiv (Z.sub (compute_index_value c1 i_1) (compute_index_value c1 i_0)) s  |> Z.succ in 
         create ~width:c1.width ~card:n ~step:s b
+
+let subset_of (c1: canon t) (c2: canon t) = 
+    (is_bottom c1 && is_bottom c2) || (not (Z.gt c1.card c2.card) && 
+    let sz = comp_size c1 in 
+    let (d,s,_) = Z.gcdext c2.step sz in 
+    let cap_J = create ~width:(Z.log2 (Z.div sz d)) ~card:c1.card ~step:(Z.div (Z.mul s c1.step) d) (Z.div (Z.mul s (Z.sub c1.base c2.base)) d) in
+    let j_1 = max_u cap_J in 
+    (Z.divisible (Z.sub c1.base c2.base) d) && Z.divisible c1.step d && not (Z.geq j_1 c2.card)
+    )
