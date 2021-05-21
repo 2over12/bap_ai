@@ -296,3 +296,61 @@ get_alps c wval compute_signed_index_value
 
 let unsigned_alps (c:canon t) = let sz = Z.pred (comp_size c) in 
  get_alps c sz compute_index_value
+
+
+let bottom ~width = create ~width:width ~step:Z.zero ~card:Z.zero Z.zero
+
+let is_bottom (x: canon t) = equal (bottom ~width:x.width) x
+
+let u'_card b s c1 c2 = (Z.fdiv (Z.sub (Z.max (compute_index_value c1 (Z.pred c1.card) ) 
+  (compute_index_value c2 (Z.pred c2.card) )) b) s)
+
+let u' (c1: canon t) (c2: canon t)= let b = Z.min c1.base c2.base in 
+  let s = Z.gcd c1.step c2.step |> Z.gcd (Z.sub c1.base c2.base|> Z.abs) in 
+  let n = u'_card b s c1 c2 in create ~width:c1.width ~step:s ~card:n b
+
+ let union (x: canon t) (y: canon t) = 
+    if equal x y then x else
+    if is_bottom x then y else 
+    if is_bottom y then x else
+    if Z.equal x.card Z.one && Z.equal y.card Z.one then 
+      create ~width:x.width ~card:(Z.succ Z.one) ~step:(Z.abs (Z.sub x.base y.base)) (Z.min x.base y.base)
+  else
+    (* the argmin value isn tclear to me *)
+    u' x y
+
+
+let min_u (c1: canon t) = let (_,(i,_)) = compute_gap_width_ex c1 Z.zero in i
+
+let closest_less_than_n (c1: canon t) (n: Z.t) = let  (facts,(min_i,_)) =  compute_gap_width_ex c1 n in pred c1 facts min_i
+
+let max_u (c1: canon t) = closest_less_than_n c1 Z.zero
+
+let concretize (index_to_value: 'a t -> Z.t -> Z.t)  (c1: 'a t) = 
+  let rec concretize' n = if Z.equal c1.card n then [] else let curr_val = index_to_value c1 n in curr_val :: (concretize' (Z.succ n)) 
+    in concretize' Z.zero
+
+let unsigned_concretize = concretize compute_index_value
+
+let intersection (c1: canon t) (c2: canon t) = if is_bottom c1 && is_bottom c2 then bottom ~width:c1.width else
+  let sz =  (comp_size c1) in 
+  let (d,s,_) = Z.gcdext c1.step sz in 
+  let (e,t,_) = Z.gcdext c2.step d in
+  let j_0 = Z.erem (Z.div (Z.mul t (Z.sub c1.base c2.base)) e) (Z.div d e) in
+  let i_base = Z.div (Z.mul s (Z.add (Z.sub c2.base c1.base) (Z.mul c2.step j_0))) d in
+  let i_step = Z.div (Z.mul c2.step s) e in 
+  let i_card = Z.fdiv (Z.sub c2.card j_0) (Z.div d e) in 
+  let cap_I = create ~width:(Z.log2 (Z.div sz d)) ~card:i_card ~step:i_step i_base in 
+  let i_0 = min_u cap_I |> compute_index_value cap_I in
+  let i_1 = closest_less_than_n c1 c1.card |>  compute_index_value cap_I in 
+    if not (Z.divisible (Z.sub c1.base c2.base) e) || Z.geq j_0 c2.card || Z.geq i_0 c1.card then bottom ~width:c1.width else 
+      let b = compute_index_value c1 i_0 in 
+      let total_values = unsigned_concretize cap_I in (* TODO this cant be what they mean*)
+      let lh = List.filter ~f:(fun v -> Z.geq v i_0) total_values in
+      let rh = List.filter ~f:(fun v -> Z.leq v i_1) total_values in
+      let prod = List.cartesian_product lh rh in 
+      let diffs = List.map ~f:(fun (f,s) -> Z.sub f s|> Z.abs) prod in 
+      let gcd_factor = List.reduce_exn ~f:Z.gcd diffs in
+      let s = Z.mul c1.step gcd_factor in 
+      let n = Z.fdiv (Z.sub (compute_index_value c1 i_1) (compute_index_value c1 i_0)) s  |> Z.succ in 
+        create ~width:c1.width ~card:n ~step:s b
