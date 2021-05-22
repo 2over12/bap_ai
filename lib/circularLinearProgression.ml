@@ -384,9 +384,12 @@ let sub c1 c2 = add c1 (neg c2)
 
 
 let bin_op_on_alps splitter f  c1 c2 ~width = let c1_splits = splitter c1 in
-      let c2_splits = splitter c2 in
-      let combs = List.cartesian_product c1_splits c2_splits |> List.map ~f:f in
-      List.fold ~f:union ~init:(bottom ~width:width)
+      if is_bottom c1 || is_bottom c2 then 
+        bottom ~width:width
+      else
+        let c2_splits = splitter c2 in
+        let combs = List.cartesian_product c1_splits c2_splits |> List.map ~f:(fun (x,y) -> f x y) in
+        List.fold ~f:union ~init:(bottom ~width:width) combs
       
 
 let bin_op_on_signed_alps = bin_op_on_alps signed_alps
@@ -397,3 +400,28 @@ let bin_op_on_signed_alps_same_width f c1 = bin_op_on_signed_alps f c1 ~width:c1
 
 let bin_op_on_unsigned_alps_same_width   f c1 = bin_op_on_unsigned_alps f c1 ~width:c1.width
 
+let signed_mul (c1': canon t) (c2': canon t)= let smul' c1 c2 = 
+  let create = create ~width:(c1.width + c2.width) in
+  if Z.equal c1.card Z.one && Z.equal c2.card Z.one then
+    create ~step:Z.zero ~card:Z.one (Z.mul c1.base c2.base)
+  else 
+    let s = Z.gcd (Z.mul c1.base c2.step |> Z.abs) (Z.mul c2.base c1.step |> Z.abs) |> Z.gcd (Z.mul c1.step c2.step) in
+    let lst_of_bases = [Z.mul c1.base c2.base;Z.mul c1.base (compute_last_val c2);Z.mul c2.base (compute_last_val c1);
+     Z.mul (compute_last_val c1) (compute_last_val c2)] in
+     let b = List.reduce_exn ~f:Z.min lst_of_bases in
+     let n = Z.fdiv (Z.sub (List.reduce_exn ~f:Z.max lst_of_bases) b) s|> Z.succ in
+     create ~step:s ~card:n b
+in bin_op_on_signed_alps smul' c1' c2' ~width:(c1'.width + c2'.width)
+
+let unsigned_mul (c1': canon t) (c2': canon t) = 
+  let nwidth = c1'.width + c2'.width in
+  let umul' c1 c2 = 
+  let create = create ~width:nwidth in
+  let b = Z.mul c1.base c2.base in 
+    if Z.equal c1.card Z.one && Z.equal c2.card Z.one then 
+    create ~step:Z.zero ~card:Z.one b 
+  else
+    let s = List.reduce_exn ~f:Z.gcd [Z.mul c1.base c2.step;Z.mul c2.base c1.step;Z.mul c1.step c2.step] in
+    let n = Z.fdiv (Z.sub (Z.mul (compute_last_val c1) (compute_last_val c2)) b) s |> Z.succ in
+    create ~step:s ~card:n b in
+    bin_op_on_unsigned_alps ~width:nwidth umul' c1' c2'
