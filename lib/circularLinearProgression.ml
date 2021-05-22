@@ -363,3 +363,19 @@ let subset_of (c1: canon t) (c2: canon t) =
     let j_1 = max_u cap_J in 
     (Z.divisible (Z.sub c1.base c2.base) d) && Z.divisible c1.step d && not (Z.geq j_1 c2.card)
     )
+
+
+let neg (c: canon t) = if is_bottom c then c else create ~width:c.width ~step:c.step ~card:c.card (Z.neg (compute_index_value c (Z.pred c.card)))
+
+let bin_op f (c1: canon t) (c2: canon t) = if is_bottom c1 || is_bottom c2 then bottom ~width:c1.width else f c1 c2
+
+let get_last_value (c: 'a t) = compute_index_value c (Z.pred c.card)
+
+let add = let add' c1 c2 =
+  let b = Z.add c1.base c2.base in 
+    if Z.equal c1.card Z.one && Z.equal c2.card Z.one then create ~width:c1.width ~step:Z.zero ~card:Z.one b
+    else
+      let s = Z.gcd c1.step c2.step in 
+      let n = Z.fdiv (Z.sub (Z.add (get_last_value c1) (get_last_value c2)) b) s |> Z.succ in
+      create ~width:c1.width ~step:s ~card:n b
+    in bin_op add'
