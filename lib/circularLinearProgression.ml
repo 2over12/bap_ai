@@ -379,3 +379,21 @@ let add = let add' c1 c2 =
       let n = Z.fdiv (Z.sub (Z.add (get_last_value c1) (get_last_value c2)) b) s |> Z.succ in
       create ~width:c1.width ~step:s ~card:n b
     in bin_op add'
+
+let sub c1 c2 = add c1 (neg c2)
+
+
+let bin_op_on_alps splitter f  c1 c2 ~width = let c1_splits = splitter c1 in
+      let c2_splits = splitter c2 in
+      let combs = List.cartesian_product c1_splits c2_splits |> List.map ~f:f in
+      List.fold ~f:union ~init:(bottom ~width:width)
+      
+
+let bin_op_on_signed_alps = bin_op_on_alps signed_alps
+
+let bin_op_on_unsigned_alps = bin_op_on_alps unsigned_alps
+
+let bin_op_on_signed_alps_same_width f c1 = bin_op_on_signed_alps f c1 ~width:c1.width
+
+let bin_op_on_unsigned_alps_same_width   f c1 = bin_op_on_unsigned_alps f c1 ~width:c1.width
+
