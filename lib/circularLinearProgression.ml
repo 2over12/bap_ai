@@ -302,6 +302,8 @@ let bottom ~width = create ~width:width ~step:Z.zero ~card:Z.zero Z.zero
 
 let is_bottom (x: canon t) = equal (bottom ~width:x.width) x
 
+let top ~width = create ~width:width ~step:Z.one ~card:(Z.pow (Z.succ Z.one) width) Z.zero
+
 let u'_card b s c1 c2 = (Z.fdiv (Z.sub (Z.max (compute_index_value c1 (Z.pred c1.card) ) 
   (compute_index_value c2 (Z.pred c2.card) )) b) s)
 
@@ -425,3 +427,85 @@ let unsigned_mul (c1': canon t) (c2': canon t) =
     let n = Z.fdiv (Z.sub (Z.mul (compute_last_val c1) (compute_last_val c2)) b) s |> Z.succ in
     create ~step:s ~card:n b in
     bin_op_on_unsigned_alps ~width:nwidth umul' c1' c2'
+
+
+let clp_contains_point (clp: 'a t) (pt: Z.t) = let sz = comp_size clp in 
+    Z.divisible (Z.sub pt clp.base) (Z.gcd clp.step sz)
+
+
+let is_singleton (c: 'a t) = Z.equal c.card Z.one
+
+let base_for_bin_op (c1: alp t) (c2: alp t) f = [f c1.base c2.base; f c1.base (compute_last_val c2); f (compute_last_val c1) c2.base; f (compute_last_val c1) (compute_last_val c2)]  
+
+
+let rec z_seq (start: Z.t) (until: Z.t) _ = if Z.leq start until then OSeq.Cons (start, z_seq (Z.succ start) until) else OSeq.Nil
+
+let compute_step_for_div (c1: alp t) (c2: alp t) (b: Z.t) signed =
+  let index_to_value =  if signed then compute_signed_index_value else compute_index_value in
+  let indices_j = z_seq Z.zero c2.card in 
+  let cjs = OSeq.map (index_to_value c2) indices_j in 
+  let divides_base = OSeq.for_all (fun cj -> Z.divisible c1.base cj) cjs in
+  let divides_step = OSeq.for_all (fun cj -> Z.divisible c1.step cj) cjs in 
+  if (not signed && divides_step) || (signed &&(divides_step && divides_base) || (divides_step && (Z.lt (compute_last_val c1) Z.zero) || Z.lt Z.zero c1.base)) then 
+    let base_shifted = OSeq.map (fun cj -> Z.sub (Z.div c1.base cj) b) cjs in
+    let maybe_abs = if signed then Z.abs else ident in
+    let step_shifted = OSeq.map (fun cj -> maybe_abs (Z.div c1.step cj)) cjs in
+    OSeq.append base_shifted step_shifted |> OSeq.reduce Z.gcd
+else 
+  Z.one
+
+
+
+let signed_div = 
+  let sdiv c1 c2 = 
+    let create = create ~width:c1.width in
+  if clp_contains_point c2 Z.zero then 
+    top ~width:c1.width
+  else 
+    if is_singleton c1 && is_singleton c2 then
+    create ~step:Z.zero ~card:Z.one (Z.div c1.base c2.base)
+    else
+      let base_pts = base_for_bin_op c1 c2 Z.div in 
+      let b = List.reduce_exn ~f:Z.min base_pts in 
+      let s = compute_step_for_div c1 c2 b true in 
+      let n = Z.fdiv (Z.sub (List.reduce_exn ~f:Z.max base_pts) b) s |> Z.succ in
+      create ~step:s ~card:n b
+    in
+      bin_op_on_signed_alps_same_width sdiv
+
+let unsigned_div = 
+  let udiv c1 c2 =
+    let create = create ~width:c1.width in
+    if clp_contains_point c2 Z.zero then 
+      top ~width:c1.width
+    else 
+      if is_singleton c1 && is_singleton c2 then
+        create ~step:Z.zero ~card:Z.one (Z.div c1.base c2.base)
+      else
+        let b = Z.div c1.base (compute_last_val c2) in 
+        let s = compute_step_for_div c1 c2 b false in 
+
+        let n = Z.fdiv (Z.sub (Z.div (compute_last_val c1) c2.base) b) s |> Z.succ in 
+
+        create ~step:s ~card:n b
+      in
+        bin_op_on_unsigned_alps_same_width udiv
+
+
+
+        (*
+c2 = b+si mod 2w
+
+c2 - b  mod 2w = si mod 2w
+*)
+
+
+let generic_modulo mul div c1 c2 = sub c1 (mul (div c1 c2) c2) 
+
+let signed_modulo = generic_modulo signed_mul signed_div
+
+let unsigned_modulo = generic_modulo unsigned_mul unsigned_div
+
+let unary_operator (f: canon t -> canon t)  (c1: canon t) = if is_bottom c1 then c1 else f c1  
+
+let not_clp = let not' c1 = create ~width:c1.width ~step:c1.step ~card:c1.card (Z.lognot (compute_last_val c1)) in unary_operator not'
