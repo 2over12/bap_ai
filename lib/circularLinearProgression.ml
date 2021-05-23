@@ -518,14 +518,19 @@ let compute_capL_capU (c: alp t) =
   let cap_U = get_set_msb differ |> Option.value_exn in (* should not be 0*)
   (Z.of_int cap_L, Z.of_int cap_U)
 
+
+let generate_n_bits (n: int) = 
+let rec generate_n_bits'
+  (curr_i: int) (acc: Z.t) = if Int.equal curr_i 0 then acc else 
+  generate_n_bits' (curr_i-1) (Z.shift_left acc 1 |> Z.succ) in
+  generate_n_bits' n Z.zero
+
 let limit_to_bit_range (a: Z.t) (lowerbound :Z.t) (upperbound :Z.t) =
   let selected_lower = Z.shift_right_trunc a (Z.to_int lowerbound) in
   (*number of high bits that need to be cleared*)
   let desired_number_of_bits = Z.sub upperbound lowerbound  |> Z.to_int in
   let diff = (Z.numbits selected_lower) - (desired_number_of_bits) in
-  let rec generate_n_bits (curr_i: int) (acc: Z.t) = if Int.equal curr_i 0 then acc else 
-    generate_n_bits (curr_i-1) (Z.shift_left acc 1 |> Z.succ) in
-  let bits = generate_n_bits diff Z.zero in 
+  let bits = generate_n_bits diff in 
   let shifted = Z.shift_left bits desired_number_of_bits in
   let mask = Z.lognot shifted in
     Z.logand selected_lower mask
@@ -567,10 +572,56 @@ let compute_L (c1: alp t) (c2: alp t) capL1 capL2 = compute_bound_generic c1 c2 
 let compute_U (c1: alp t) (c2: alp t) capU1 capU2 = compute_bound_generic c1 c2 capU1 capU2 comp_range_U true
 
 
+let lsb_from_range_all1s (lower: Z.t) (upper: Z.t) (from: alp t) = 
+  let from_bits = from.base in 
+  let rec find_bit_sequence_of_1s curr_ind = 
+    if Z.equal lower (Z.of_int curr_ind) then 
+      Z.succ lower
+    else if Z.testbit from_bits curr_ind then 
+      find_bit_sequence_of_1s (curr_ind - 1)
+    else
+      curr_ind + 1 |> Z.of_int in
+    find_bit_sequence_of_1s (Z.to_int upper)
+
+let compute_U' (c1: alp t) (c2: alp t) capU1 capU2 capU = 
+  if Z.gt capU1 capU2 && Z.equal capU1 capU then
+    lsb_from_range_all1s capU2 capU1 c2
+  else if Z.gt capU2 capU1 && Z.equal capU2 capU then 
+    lsb_from_range_all1s capU1 capU2 c1
+else 
+  Z.succ capU
+
+
+let create_mask capL capU' = 
+  let num_1s = Z.max Z.zero (Z.sub capU' capL) in 
+  let bits = generate_n_bits (Z.to_int num_1s) in
+  Z.shift_left bits (Z.to_int capL)
+
 let compute_bsn_logand (c1: alp t) (c2:alp t) = 
   let (cap_L1,cap_U1) = compute_capL_capU c1 in 
   let (cap_L2,cap_U2) = compute_capL_capU c2 in
-  (Z.zero,Z.zero,Z.zero)
+  let (capL, capU) = (compute_L c1 c2 cap_L1 cap_L2,compute_U c1 c2 cap_U1 cap_U2) in
+  if Z.leq capL capU then
+    let capU' = compute_U' c1 c2 cap_U1 cap_U2 capU in 
+    let m = create_mask capL capU' in
+    let l = Z.logand (Z.logand c1.base c2.base) (Z.lognot m) in 
+    let last_c1 = (compute_last_val c1) in 
+    let last_c2 = (compute_last_val c2) in 
+    let u = Z.min (Z.logor (Z.logand last_c1 last_c2) m) last_c1 |> Z.min last_c2 in 
+    let twototheL = (Z.pow (Z.succ Z.one) (Z.to_int capL)) in
+    let s = if Z.gt cap_U1 cap_U2 && Z.equal capU cap_U1 && Z.equal capU' capL then
+      Z.max c1.step twototheL 
+    else 
+      if Z.gt cap_U2 cap_U1  && Z.equal capU cap_U2 && Z.equal capU' capL then
+      Z.max c2.step twototheL
+    else
+      twototheL in
+    let and_of_bases = (Z.logand c1.base c2.base) in
+    let b = Z.add and_of_bases (Z.mul s (Z.cdiv (Z.sub l and_of_bases) s)) in
+    let n = Z.fdiv (Z.sub u b) s |> Z.succ in 
+    (b,s,n)
+  else 
+    ((Z.logand c1.base c2.base), Z.zero, Z.one)
 
 let logand = 
   let logand_alp (c1: alp t) (c2: alp t) = 
