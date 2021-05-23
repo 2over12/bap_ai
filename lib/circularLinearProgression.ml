@@ -491,14 +491,6 @@ let unsigned_div =
       in
         bin_op_on_unsigned_alps_same_width udiv
 
-
-
-        (*
-c2 = b+si mod 2w
-
-c2 - b  mod 2w = si mod 2w
-*)  
-
 let downgrade_alp (a: alp t) = ({width=a.width;base=a.base; step=a.step; card=a.card}: 'a t)
 
 let generic_modulo mul div splitter =
@@ -515,3 +507,81 @@ let unsigned_modulo = generic_modulo unsigned_mul unsigned_div bin_op_on_unsigne
 let unary_operator (f: canon t -> canon t)  (c1: canon t) = if is_bottom c1 then c1 else f c1  
 
 let not_clp = let not' c1 = create ~width:c1.width ~step:c1.step ~card:c1.card (Z.lognot (compute_last_val c1)) in unary_operator not'
+
+let get_set_msb (a: Z.t)  =
+    let res = Z.numbits a |> (-) 1 in
+      if Int.(<) res 0 then None else Some res
+
+let compute_capL_capU (c: alp t) = 
+  let cap_L = Z.trailing_zeros c.step in 
+  let differ = Z.logxor (compute_last_val c) c.base in 
+  let cap_U = get_set_msb differ |> Option.value_exn in (* should not be 0*)
+  (Z.of_int cap_L, Z.of_int cap_U)
+
+let limit_to_bit_range (a: Z.t) (lowerbound :Z.t) (upperbound :Z.t) =
+  let selected_lower = Z.shift_right_trunc a (Z.to_int lowerbound) in
+  (*number of high bits that need to be cleared*)
+  let desired_number_of_bits = Z.sub upperbound lowerbound  |> Z.to_int in
+  let diff = (Z.numbits selected_lower) - (desired_number_of_bits) in
+  let rec generate_n_bits (curr_i: int) (acc: Z.t) = if Int.equal curr_i 0 then acc else 
+    generate_n_bits (curr_i-1) (Z.shift_left acc 1 |> Z.succ) in
+  let bits = generate_n_bits diff Z.zero in 
+  let shifted = Z.shift_left bits desired_number_of_bits in
+  let mask = Z.lognot shifted in
+    Z.logand selected_lower mask
+
+
+let get_set_lsb (a: Z.t) = let set_lsb = Z.trailing_zeros a in if Int.equal Int.max_value set_lsb then None else Some set_lsb
+
+
+
+let generic_comp_range (lower: Z.t) (upper: Z.t) (target: alp t) (default_if_fail: Z.t) (get_bit_from_range: Z.t -> int option) = 
+  let selected_bits = limit_to_bit_range lower upper target.base in
+  let bt_not_shifted = get_bit_from_range selected_bits in 
+  match bt_not_shifted with 
+  | None -> default_if_fail
+  | Some not_shifted -> Z.add (Z.of_int not_shifted) lower
+
+
+let comp_range_L (lower: Z.t) (upper: Z.t) (target: alp t) = 
+  generic_comp_range lower upper target upper get_set_lsb
+
+
+
+let comp_range_U (lower: Z.t) (upper: Z.t) (target: alp t) = 
+  generic_comp_range (Z.succ lower) (Z.succ upper) target lower get_set_msb
+
+
+let compute_bound_generic (c1: alp t) (c2: alp t) c1bound c2bound (comp_range: Z.t -> Z.t -> alp t -> Z.t) (same_target_as_lower_bound: bool) =
+  if Z.equal c1bound c2bound then 
+    c1bound
+else if Z.lt c1bound c2bound then 
+  comp_range c1bound c2bound (if same_target_as_lower_bound then c1 else c2)
+else
+  comp_range c2bound c1bound (if same_target_as_lower_bound then c2 else c1)
+
+
+let compute_L (c1: alp t) (c2: alp t) capL1 capL2 = compute_bound_generic c1 c2 capL1 capL2 comp_range_L false
+    
+
+let compute_U (c1: alp t) (c2: alp t) capU1 capU2 = compute_bound_generic c1 c2 capU1 capU2 comp_range_U true
+
+
+let compute_bsn_logand (c1: alp t) (c2:alp t) = 
+  let (cap_L1,cap_U1) = compute_capL_capU c1 in 
+  let (cap_L2,cap_U2) = compute_capL_capU c2 in
+  (Z.zero,Z.zero,Z.zero)
+
+let logand = 
+  let logand_alp (c1: alp t) (c2: alp t) = 
+  let band = Z.logand c1.base c2.base in 
+  let (b,s,n) = if Z.equal c1.card  Z.one && Z.equal c2.card Z.one then 
+    (band,Z.zero, Z.one)
+  else if Z.equal c1.card Z.one && Z.equal c2.card (Z.succ Z.one) then
+    (band,Z.sub (Z.logand c1.base (compute_last_val c2)) band, (Z.succ Z.one))
+  else if Z.equal c2.card Z.one && Z.equal c1.card (Z.succ Z.one) then 
+    (band,Z.sub (Z.logand c2.base (compute_last_val c1)) band, (Z.succ Z.one))
+  else
+    compute_bsn_logand c1 c2
+  in create ~width:c1.width ~step:s ~card:n b
+in bin_op_on_unsigned_alps_same_width logand_alp
