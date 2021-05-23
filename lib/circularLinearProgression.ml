@@ -497,14 +497,20 @@ let unsigned_div =
 c2 = b+si mod 2w
 
 c2 - b  mod 2w = si mod 2w
-*)
+*)  
 
+let downgrade_alp (a: alp t) = ({width=a.width;base=a.base; step=a.step; card=a.card}: 'a t)
 
-let generic_modulo mul div c1 c2 = sub c1 (mul (div c1 c2) c2) 
+let generic_modulo mul div splitter =
+  let gmodulo c1 c2 = 
+      let c1' = downgrade_alp c1 in 
+      let c2' = downgrade_alp c2 in 
+      sub c1' (mul (div c1' c2') c2') in
+      splitter gmodulo
 
-let signed_modulo = generic_modulo signed_mul signed_div
+let signed_modulo = generic_modulo signed_mul signed_div bin_op_on_signed_alps_same_width
 
-let unsigned_modulo = generic_modulo unsigned_mul unsigned_div
+let unsigned_modulo = generic_modulo unsigned_mul unsigned_div bin_op_on_unsigned_alps_same_width
 
 let unary_operator (f: canon t -> canon t)  (c1: canon t) = if is_bottom c1 then c1 else f c1  
 
