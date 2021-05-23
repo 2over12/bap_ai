@@ -636,3 +636,16 @@ let logand =
     compute_bsn_logand c1 c2
   in create ~width:c1.width ~step:s ~card:n b
 in bin_op_on_unsigned_alps_same_width logand_alp
+
+let logor = let logor_alp (c1: alp t) (c2: alp t) = 
+  let c1' = downgrade_alp c1 in 
+  let c2' = downgrade_alp c2 in 
+  not_clp (logand (not_clp c1') (not_clp c2')) in 
+  bin_op_on_unsigned_alps_same_width logor_alp
+
+
+let logxor = let logxor_alp (c1: alp t) (c2: alp t) = 
+  let c1' = downgrade_alp c1 in 
+  let c2' = downgrade_alp c2 in 
+  logor (logand (not_clp c1') c2') (logand c1' (not_clp c2')) in 
+  bin_op_on_unsigned_alps_same_width logxor_alp
