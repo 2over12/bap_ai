@@ -649,3 +649,18 @@ let logxor = let logxor_alp (c1: alp t) (c2: alp t) =
   let c2' = downgrade_alp c2 in 
   logor (logand (not_clp c1') c2') (logand c1' (not_clp c2')) in 
   bin_op_on_unsigned_alps_same_width logxor_alp
+
+
+let bin_op_clp_alp_unsigned_same_width (f: canon t -> alp t -> canon t) (c1: canon t)  (c2: canon t)  = let alps =  unsigned_alps c2 in 
+  List.map ~f:(fun a -> f c1 a) alps |> List.fold ~f:union ~init:(bottom ~width:c1.width)
+
+let left_shift =
+  let left_shift_alp (c1: canon t) (c2: alp t) = 
+  let b = Z.shift_left c1.base  (Z.to_int c2.base) (*todo this may not work if c2base is too big*) in
+  let s = if Z.equal c2.card Z.one then 
+    Z.shift_left c1.step (Z.to_int c2.base)
+  else 
+    Z.shift_left (Z.gcd c1.base c1.step) (Z.to_int c2.base) in
+  let n = Z.fdiv (Z.sub (Z.shift_left (compute_last_val c1) (Z.to_int (compute_last_val c2))) b) s |> Z.succ in (*todo this also could fail*) (* maybe we want to make sure these shifts are on mod 2^w*)
+  create ~width:c1.width ~step:s ~card:n b in
+    bin_op_clp_alp_unsigned_same_width left_shift_alp
