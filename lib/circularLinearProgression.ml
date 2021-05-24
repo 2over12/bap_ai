@@ -385,18 +385,22 @@ let add = let add' c1 c2 =
 let sub c1 c2 = add c1 (neg c2)
 
 
-let bin_op_on_alps splitter f  c1 c2 ~width = let c1_splits = splitter c1 in
+let bin_op_on_alps splitter1 splitter2 f  c1 c2 ~width = let c1_splits = splitter1 c1 in
       if is_bottom c1 || is_bottom c2 then 
         bottom ~width:width
       else
-        let c2_splits = splitter c2 in
+        let c2_splits = splitter2 c2 in
         let combs = List.cartesian_product c1_splits c2_splits |> List.map ~f:(fun (x,y) -> f x y) in
         List.fold ~f:union ~init:(bottom ~width:width) combs
       
 
-let bin_op_on_signed_alps = bin_op_on_alps signed_alps
+let bin_op_on_signed_alps = bin_op_on_alps signed_alps signed_alps
 
-let bin_op_on_unsigned_alps = bin_op_on_alps unsigned_alps
+let bin_op_on_unsigned_alps = bin_op_on_alps unsigned_alps unsigned_alps
+
+let bin_op_on_signed_unsigned_alps = bin_op_on_alps signed_alps unsigned_alps
+
+let bin_op_on_signed_unsigned_alps_same_width f c1 = bin_op_on_signed_unsigned_alps f c1 ~width:c1.width
 
 let bin_op_on_signed_alps_same_width f c1 = bin_op_on_signed_alps f c1 ~width:c1.width
 
@@ -652,7 +656,10 @@ let logxor = let logxor_alp (c1: alp t) (c2: alp t) =
 
 
 let bin_op_clp_alp_unsigned_same_width (f: canon t -> alp t -> canon t) (c1: canon t)  (c2: canon t)  = let alps =  unsigned_alps c2 in 
-  List.map ~f:(fun a -> f c1 a) alps |> List.fold ~f:union ~init:(bottom ~width:c1.width)
+  if is_bottom c1 || is_bottom c2 then
+    bottom ~width:c1.width 
+  else  
+List.map ~f:(fun a -> f c1 a) alps |> List.fold ~f:union ~init:(bottom ~width:c1.width)
 
 let left_shift =
   let left_shift_alp (c1: canon t) (c2: alp t) = 
@@ -664,3 +671,38 @@ let left_shift =
   let n = Z.fdiv (Z.sub (Z.shift_left (compute_last_val c1) (Z.to_int (compute_last_val c2))) b) s |> Z.succ in (*todo this also could fail*) (* maybe we want to make sure these shifts are on mod 2^w*)
   create ~width:c1.width ~step:s ~card:n b in
     bin_op_clp_alp_unsigned_same_width left_shift_alp
+
+let all_in_range_are_1 (lower: Z.t) (upper: Z.t) (value: Z.t) = let bts = limit_to_bit_range lower upper value in 
+    let num_bits = Z.sub upper lower in 
+    let expected_value = Z.pow (Z.succ Z.one) (Z.to_int num_bits) |> Z.pred in 
+    Z.equal bts expected_value
+(*arithmetic shift*)
+(*TODO all shifts may fail due to an overflow need a way to fix that*)
+
+
+let generic_right_shift (shifter: Z.t -> int -> Z.t) (alp_splitter: (alp t -> alp t -> canon t) -> canon t -> canon t -> canon t) (should_consider_second_case: bool) =
+  let right_shift_alp (c1: alp t) (c2: alp t) = 
+    if Z.equal c1.card Z.one && Z.equal c2.card Z.one then
+      create ~width:c1.width ~card:Z.one ~step:Z.zero (Z.shift_right c1.base (Z.to_int c2.base))
+    else 
+      let last_val_c1 = compute_last_val c1 in 
+      let last_val_c2 = compute_last_val c2 in
+      let b = Z.shift_right c1.base ((if Z.geq c1.base Z.zero || not should_consider_second_case then last_val_c2 else c2.base) |> Z.to_int) in
+      let nsz = Z.pow (Z.succ Z.one) (Z.to_int last_val_c2) in
+      let s = if Z.divisible c1.step nsz && (Z.equal c2.card Z.one || Z.divisible c1.base nsz || all_in_range_are_1 Z.zero last_val_c2 c1.base) then 
+        Z.gcd (Z.shift_right c1.step (Z.to_int last_val_c2)) (Z.sub (Z.shift_right c1.base (Z.sub last_val_c2 c2.step |> Z.to_int)) (Z.shift_right c1.base (Z.to_int last_val_c2)))
+    else 
+      Z.one in
+      let n = 
+        if Z.geq c1.base last_val_c1 || not should_consider_second_case then 
+         Z.fdiv (Z.sub (Z.shift_right last_val_c1 (Z.to_int c2.base)) b) s|> Z.succ
+        else 
+          Z.fdiv (Z.sub (Z.shift_right last_val_c1 (Z.to_int last_val_c2)) b) s|> Z.succ
+        in 
+        create ~width:c1.width ~card:n ~step:s b in
+        alp_splitter right_shift_alp
+      
+
+let right_shift_unsigned = generic_right_shift Z.shift_right_trunc bin_op_on_unsigned_alps_same_width false
+
+let right_shift_signed = generic_right_shift Z.shift_right bin_op_on_signed_unsigned_alps_same_width true
