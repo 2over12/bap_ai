@@ -63,6 +63,27 @@ let test_canon_casec _ =
       create_alp ~width:8 ~card:(Z.of_int 8) ~step:(Z.of_int 8) (Z.of_int 194);
     ] alps  
 
+  (*TODO should probably generate zarith ints to allow for bigints*)
+  let clp_gen = QCheck.Gen.(map (fun x -> x+1) small_nat
+  >>= (fun width -> 
+    map 
+      (fun vals -> CircularLinearProgression.Z.Set.of_list vals |> CircularLinearProgression.abstract ~width:width) 
+      (map (fun a -> List.map ~f:CircularLinearProgression.Z.of_int a) (list int))
+      ))
+
+  let print_clp c = CircularLinearProgression.sexp_of_t c |> Sexp.to_string
+ 
+  (*maybe can do better?*)
+  let shrink_clp (c: CircularLinearProgression.canon CircularLinearProgression.t) =  QCheck.Iter.map (fun new_card -> CircularLinearProgression.create ~width:c.width ~card:(Z.of_int new_card) ~step:c.step c.base) (QCheck.Shrink.int (c.card|> Z.to_int))
+  
+  let arbitrary_clp = QCheck.make ~print:print_clp ~shrink:shrink_clp clp_gen
+
+  (*
+  let test_unary_operator abstract_op concrete_op concretization_function c = QCheck.Test.make ~count:c arbitrary_clp (fun a -> 
+    let concrete_values: Z.t list = concretization_function a in
+    let resulting_concrete_values = List.map
+    )*)
+
   let suite =
   "Test CLPs" >::: [
     "test_canon_casea" >:: test_canon_casea;

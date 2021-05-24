@@ -6,6 +6,17 @@ type canon
 type generic
 type alp
 
+
+module Z = struct 
+  module T = struct 
+    include Z
+    let sexp_of_t (a: Z.t) = Sexp.Atom (Z.to_string a)
+    let t_of_sexp (it: Sexp.t) = raise (Failure "not implemented")
+  end
+  include Comparable.Make(T)
+  include T
+end
+
 type 'a t =  {
   base: Z.t;
   step: Z.t; 
@@ -379,9 +390,9 @@ let subset_of (c1: canon t) (c2: canon t) =
     (Z.divisible (Z.sub c1.base c2.base) d) && Z.divisible c1.step d && not (Z.geq j_1 c2.card)
     )
 
-(*TODO maybe should use Z.t also probably not the best abstraction of a set*)
-let abstract_single_value (x: int) ~width = create ~width:width ~step:Z.zero ~card:Z.one (Z.of_int x)
-let abstract ~width =  Int.Set.fold ~init:(bottom ~width:width) ~f:(fun accum curr -> union (abstract_single_value ~width:width curr) accum)
+(*TODO probably not the best abstraction of a set*)
+let abstract_single_value (x: Z.t) ~width = create ~width:width ~step:Z.zero ~card:Z.one x
+let abstract ~width =  Z.Set.fold ~init:(bottom ~width:width) ~f:(fun accum curr -> union (abstract_single_value ~width:width curr) accum)
 
 let neg (c: canon t) = if is_bottom c then c else create ~width:c.width ~step:c.step ~card:c.card (Z.neg (compute_index_value c (Z.pred c.card)))
 
