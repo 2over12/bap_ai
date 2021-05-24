@@ -130,7 +130,9 @@ let canonize (c: 'a t) =
 
 
 
-let create ~width:(width:int) ~step:(step:Z.t) ~card:(card:Z.t) (base:Z.t) = canonize {width=width;step=step; base=base;card=card}
+let create ~width:(width:int) ~step:(step:Z.t) ~card:(card:Z.t) (base:Z.t) =
+  (*print_endline ("width: " ^ Int.to_string width ^ "step: " ^ Z.to_string step ^ " card: " ^ Z.to_string card ^ " base: " ^ Z.to_string base);*)
+  canonize {width=width;step=step; base=base;card=card}
 
 let num_steps_leq_n n from by = Z.fdiv (Z.sub n from) by
 

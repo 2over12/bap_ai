@@ -64,12 +64,22 @@ let test_canon_casec _ =
     ] alps  
 
   (*TODO should probably generate zarith ints to allow for bigints*)
+(*
   let clp_gen = QCheck.Gen.((int_range 2 12)
   >>= (fun width -> 
     map 
       (fun vals -> CircularLinearProgression.Z.Set.of_list vals |> CircularLinearProgression.abstract ~width:width) 
       (map (fun a -> List.map ~f:CircularLinearProgression.Z.of_int a) (list int))
-      ))
+      ))*)
+
+
+  let clp_gen = QCheck.Gen.(let width_gen = (int_range 2 12) in
+  let member_gen = map Z.of_int (graft_corners int int_corners ()) in
+  let card_gen = map Z.of_int (graft_corners nat int_pos_corners ()) in
+  quad width_gen member_gen member_gen card_gen
+  >|=fun (width, base,step,card) -> 
+      CircularLinearProgression.create ~width:width ~step:step ~card:card base
+      )
 
   let print_clp c = CircularLinearProgression.sexp_of_t c |> Sexp.to_string
  
@@ -78,8 +88,8 @@ let test_canon_casec _ =
   
   let arbitrary_clp = QCheck.make ~print:print_clp ~shrink:shrink_clp clp_gen
 
-  
   let test_unary_operator abstract_op concrete_op concretization_function reduction_function  compute_width ~count = QCheck.Test.make ~count:count arbitrary_clp (fun a -> 
+    (*print_endline (CircularLinearProgression.sexp_of_t a |> Sexp.to_string);*)
     let concrete_values = concretization_function a in
     let resulting_concrete_values = CircularLinearProgression.Z.Set.map ~f:(Fn.compose (reduction_function ~width:(compute_width a)) concrete_op) concrete_values in 
     let resulting_abstract_values = abstract_op a |> concretization_function  in
@@ -90,7 +100,6 @@ let test_canon_casec _ =
 
   let neg_regression _  = let initial_clp = CircularLinearProgression.create ~width:9 ~step:Z.one ~card:(Z.of_int 257) Z.zero in
   let res_clp = CircularLinearProgression.neg initial_clp in 
-  let () = CircularLinearProgression.sexp_of_t res_clp |> Sexp.to_string |> print_endline in 
    let resulting_values = res_clp |> CircularLinearProgression.signed_concretize |> CircularLinearProgression.Z.Set.to_list |> List.sort ~compare:CircularLinearProgression.Z.compare in 
    let expected_values = CircularLinearProgression.Z.Set.map ~f:(Fn.compose (CircularLinearProgression.interpret_signed_value ~width:initial_clp.width)  Z.neg) (CircularLinearProgression.signed_concretize initial_clp) |> CircularLinearProgression.Z.Set.to_list |> List.sort ~compare:CircularLinearProgression.Z.compare in 
     assert_equal ~printer:(fun s -> Sexp.List (List.map ~f:(fun a -> Sexp.Atom (Z.to_string a)) s )|>  Sexp.to_string) expected_values resulting_values
