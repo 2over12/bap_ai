@@ -25,7 +25,8 @@ type 'a t =  {
 } [@@deriving compare]
 
 type 'a t' = 'a t
-let sexp_of_t (v: 'a t)  = Sexp.List [Sexp.Atom (Z.to_string v.base); Sexp.Atom (Z.to_string v.step); Sexp.Atom (Z.to_string v.card); Sexp.Atom (Int.to_string v.width)]
+let pr_obj a b = Sexp.List [Sexp.Atom a; Sexp.Atom b]
+let sexp_of_t (v: 'a t)  = Sexp.List [pr_obj "base" (Z.to_string v.base);pr_obj "step" (Z.to_string v.step);pr_obj "card" (Z.to_string v.card); pr_obj "width" (Int.to_string v.width)]
 let t_of_sexp (v:Sexp.t) = raise (Failure "") (* TODO parse the thing*)
 
 

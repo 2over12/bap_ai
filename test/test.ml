@@ -64,7 +64,7 @@ let test_canon_casec _ =
     ] alps  
 
   (*TODO should probably generate zarith ints to allow for bigints*)
-  let clp_gen = QCheck.Gen.(map (fun x -> x+1) small_nat
+  let clp_gen = QCheck.Gen.((int_range 2 12)
   >>= (fun width -> 
     map 
       (fun vals -> CircularLinearProgression.Z.Set.of_list vals |> CircularLinearProgression.abstract ~width:width) 
