@@ -78,11 +78,15 @@ let test_canon_casec _ =
   
   let arbitrary_clp = QCheck.make ~print:print_clp ~shrink:shrink_clp clp_gen
 
-  (*
-  let test_unary_operator abstract_op concrete_op concretization_function c = QCheck.Test.make ~count:c arbitrary_clp (fun a -> 
-    let concrete_values: Z.t list = concretization_function a in
-    let resulting_concrete_values = List.map
-    )*)
+  
+  let test_unary_operator abstract_op concrete_op concretization_function ~count = QCheck.Test.make ~count:count arbitrary_clp (fun a -> 
+    let concrete_values = concretization_function a in
+    let resulting_concrete_values = CircularLinearProgression.Z.Set.map ~f:concrete_op concrete_values in 
+    let resulting_abstract_values = abstract_op a |> concretization_function  in
+    CircularLinearProgression.Z.Set.is_subset resulting_abstract_values ~of_:resulting_concrete_values
+  )
+
+  let test_neg = QCheck_ounit.to_ounit2_test  (test_unary_operator CircularLinearProgression.neg CircularLinearProgression.Z.neg CircularLinearProgression.signed_concretize ~count:200)
 
   let suite =
   "Test CLPs" >::: [
@@ -96,7 +100,7 @@ let test_canon_casec _ =
     "test_incision_alp_split" >:: test_incision_alp_split;
     "test_incision_alp_split_signed" >:: test_incision_alp_split_signed;
     "test_slow_alp_split_signed" >:: test_slow_alp_split_signed;
-    "test_slow_alp_split_unsigned" >:: test_slow_alp_split_unsigned
+    "test_slow_alp_split_unsigned" >:: test_slow_alp_split_unsigned;test_neg
   ]
 
 let () =

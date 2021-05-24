@@ -352,8 +352,9 @@ let max_u_value (c1: canon t) = max_u c1 |> compute_index_value c1
 let min_u_value (c1: canon t) = min_u c1 |> compute_index_value c1
 
 let concretize (index_to_value: 'a t -> Z.t -> Z.t)  (c1: 'a t) = 
-  let rec concretize' n = if Z.equal c1.card n then [] else let curr_val = index_to_value c1 n in curr_val :: (concretize' (Z.succ n)) 
-    in concretize' Z.zero
+    let () = assert (Z.geq c1.card Z.zero) in
+  let rec concretize' n (total: Z.Set.t) = if Z.equal c1.card n then total else let curr_val = index_to_value c1 n in concretize' (Z.succ n) (Z.Set.add total curr_val )
+    in concretize' Z.zero Z.Set.empty
 
 let unsigned_concretize (c:'a t) = (concretize compute_index_value) c
 let signed_concretize (c:'a t) = (concretize compute_signed_index_value) c
@@ -372,8 +373,8 @@ let intersection (c1: canon t) (c2: canon t) = if is_bottom c1 && is_bottom c2 t
     if not (Z.divisible (Z.sub c1.base c2.base) e) || Z.geq j_0 c2.card || Z.geq i_0 c1.card then bottom ~width:c1.width else 
       let b = compute_index_value c1 i_0 in 
       let total_values = unsigned_concretize cap_I in (* TODO this cant be what they mean*)
-      let lh = List.filter ~f:(fun v -> Z.geq v i_0) total_values in
-      let rh = List.filter ~f:(fun v -> Z.leq v i_1) total_values in
+      let lh = Z.Set.filter ~f:(fun v -> Z.geq v i_0) total_values |> Z.Set.to_list in
+      let rh = Z.Set.filter ~f:(fun v -> Z.leq v i_1) total_values |> Z.Set.to_list in
       let prod = List.cartesian_product lh rh in 
       let diffs = List.map ~f:(fun (f,s) -> Z.sub f s|> Z.abs) prod in 
       let gcd_factor = List.reduce_exn ~f:Z.gcd diffs in
