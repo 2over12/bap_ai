@@ -344,8 +344,8 @@ let concretize (index_to_value: 'a t -> Z.t -> Z.t)  (c1: 'a t) =
   let rec concretize' n = if Z.equal c1.card n then [] else let curr_val = index_to_value c1 n in curr_val :: (concretize' (Z.succ n)) 
     in concretize' Z.zero
 
-let unsigned_concretize = concretize compute_index_value
-let signed_concretize = concretize compute_signed_index_value
+let unsigned_concretize (c:'a t) = (concretize compute_index_value) c
+let signed_concretize (c:'a t) = (concretize compute_signed_index_value) c
 
 let intersection (c1: canon t) (c2: canon t) = if is_bottom c1 && is_bottom c2 then bottom ~width:c1.width else
   let sz =  (comp_size c1) in 
