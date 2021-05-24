@@ -326,7 +326,19 @@ let min_u (c1: canon t) = let (_,(i,_)) = compute_gap_width_ex c1 Z.zero in i
 
 let closest_less_than_n (c1: canon t) (n: Z.t) = let  (facts,(min_i,_)) =  compute_gap_width_ex c1 n in pred c1 facts min_i
 
+
+let min_s (c1: canon t) = let (_,(i,_)) = compute_gap_width_ex c1 (Z.neg (comp_size_with_modifier c1 (-1))) in i
+let max_s (c1: canon t) = closest_less_than_n c1 (Z.neg (comp_size_with_modifier c1 (-1)))
+
+let max_s_value (c1: canon t) = max_s c1 |> compute_signed_index_value c1
+
+let min_s_value (c1: canon t) = max_s c1 |> compute_signed_index_value c1
+
 let max_u (c1: canon t) = closest_less_than_n c1 Z.zero
+
+let max_u_value (c1: canon t) = max_u c1 |> compute_index_value c1
+
+let min_u_value (c1: canon t) = min_u c1 |> compute_index_value c1
 
 let concretize (index_to_value: 'a t -> Z.t -> Z.t)  (c1: 'a t) = 
   let rec concretize' n = if Z.equal c1.card n then [] else let curr_val = index_to_value c1 n in curr_val :: (concretize' (Z.succ n)) 
@@ -706,3 +718,30 @@ let generic_right_shift (shifter: Z.t -> int -> Z.t) (alp_splitter: (alp t -> al
 let right_shift_unsigned = generic_right_shift Z.shift_right_trunc bin_op_on_unsigned_alps_same_width false
 
 let right_shift_signed = generic_right_shift Z.shift_right bin_op_on_signed_unsigned_alps_same_width true
+
+let equality (c1: canon t) (c2: canon t) = 
+  if is_bottom c1 || is_bottom c2 then 
+    bottom ~width:1
+else if Z.equal c1.card Z.one && Z.equal c2.card Z.one && Z.equal c1.base c2.base then
+  create ~width:1 ~card:Z.one ~step:Z.zero Z.one
+else if intersection c1 c2 |> is_bottom then 
+  create ~width:1 ~card:Z.one ~step:Z.zero Z.zero
+else 
+  top ~width:1 
+
+  let not_equal (c1: canon t) (c2: canon t) = not_clp (equality c1 c2)
+
+
+  let generalized_less_than (max_val: canon t -> Z.t) (min_val: canon t -> Z.t) (c1: canon t) (c2: canon t) = 
+    if is_bottom c1 || is_bottom c2 then 
+      bottom ~width:1
+  else if Z.lt (max_val c1) (min_val c2) then
+    create ~width:1 ~card:Z.one ~step:Z.zero Z.one
+  else if Z.geq (min_val c1) (max_val c2) then 
+    create ~width:1 ~card:Z.one ~step:Z.zero Z.zero
+  else 
+    top ~width:1
+
+  let less_than_signed (c1: canon t) (c2: canon t) = generalized_less_than max_s_value min_s_value
+
+  let less_than_unsigned (c1: canon t) (c2: canon t) = generalized_less_than max_u_value min_u_value
