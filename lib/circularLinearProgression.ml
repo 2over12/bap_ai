@@ -345,6 +345,7 @@ let concretize (index_to_value: 'a t -> Z.t -> Z.t)  (c1: 'a t) =
     in concretize' Z.zero
 
 let unsigned_concretize = concretize compute_index_value
+let signed_concretize = concretize compute_signed_index_value
 
 let intersection (c1: canon t) (c2: canon t) = if is_bottom c1 && is_bottom c2 then bottom ~width:c1.width else
   let sz =  (comp_size c1) in 
@@ -378,6 +379,9 @@ let subset_of (c1: canon t) (c2: canon t) =
     (Z.divisible (Z.sub c1.base c2.base) d) && Z.divisible c1.step d && not (Z.geq j_1 c2.card)
     )
 
+(*TODO maybe should use Z.t*)
+let abstract_single_value (x: int) ~width = create ~width:width ~step:Z.zero ~card:Z.one (Z.of_int x)
+let abstract ~width =  Int.Set.fold ~init:(bottom ~width:width) ~f:(fun accum curr -> union (abstract_single_value ~width:width curr) accum)
 
 let neg (c: canon t) = if is_bottom c then c else create ~width:c.width ~step:c.step ~card:c.card (Z.neg (compute_index_value c (Z.pred c.card)))
 
