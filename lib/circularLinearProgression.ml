@@ -12,6 +12,8 @@ module Z = struct
     include Z
     let sexp_of_t (a: Z.t) = Sexp.Atom (Z.to_string a)
     let t_of_sexp (it: Sexp.t) = raise (Failure "not implemented")
+
+    let compare = Z.compare
   end
   include Comparable.Make(T)
   include T
@@ -31,16 +33,20 @@ let t_of_sexp (v:Sexp.t) = raise (Failure "") (* TODO parse the thing*)
 
 
 include Comparable.Make(struct 
-  type t =  canon t' 
+  type t =  canon t'
 
   let sexp_of_t = sexp_of_t
+  
   let t_of_sexp = t_of_sexp
 
-  let compare = compare (fun _ _ -> 0)
+  let compare  = compare (fun _ _ -> 0)
 end)
 
 
-let comp_size_with_modifier (c: 'a t) (modif: int) = (Z.pow  (Z.succ Z.one) (c.width+ modif))
+
+let comp_size_from_width ~width (modif: int) = (Z.pow  (Z.succ Z.one) (width+ modif))
+
+let comp_size_with_modifier (c: 'a t) (modif: int) = comp_size_from_width ~width:c.width modif
 
 let comp_size (c: 'a t) = comp_size_with_modifier c 0
 
@@ -87,9 +93,24 @@ let ib = Z.add x (Z.mul c k) in
 let new_basei = Z.sub cl.card ib in 
   Z.erem (Z.add cl.base (Z.mul cl.step new_basei)) cl_size
 
+  let compute_index_value_without_mod (c: 'a t) i = (Z.add c.base (Z.mul i c.step))
 
-let compute_last_val (c:'a t) = Z.erem (Z.add c.base (Z.mul c.step (Z.sub c.card Z.one))) (comp_size c)
 
+let interpret_unsigned_value  (pval: Z.t) ~width = let sz = comp_size_from_width ~width:width 0 in Z.erem pval sz 
+  let compute_index_value (c: 'a t) i = interpret_unsigned_value ~width:c.width (Z.add c.base (Z.mul i c.step))
+  
+  let interpret_signed_value  ~width (pval: Z.t) = 
+  let sz = comp_size_from_width ~width:width 0 in
+  let modded_pos = Z.erem pval sz in 
+  if (Z.lt modded_pos (comp_size_from_width ~width:width (-1))) then modded_pos else
+    Z.sub modded_pos sz
+
+
+  
+  let compute_signed_index_value (c: 'a t) i = 
+    let pval =  compute_index_value_without_mod c i in interpret_signed_value ~width:c.width pval
+
+let compute_last_val (c:'a t) = compute_index_value c (Z.pred c.card)
 let canonize (c: 'a t) =
   let k = comp_k c in
   let gap = Z.gcd c.step (comp_size c) in
@@ -128,19 +149,6 @@ let shrink ind_constraint gap_constraint n i_shrink g_shrink i_by g_by =
 let shrink_to_gap_0 = shrink num_steps_leq_nsub1 num_steps_geq0
 
 let shrink_to_gap_gt0 = shrink num_steps_leq_nsub1 num_steps_gt0
-
-
-
-
-let compute_index_value_without_mod (c: 'a t) i = (Z.add c.base (Z.mul i c.step))
-
-let compute_index_value (c: 'a t) i = let sz = comp_size c in (Z.erem (Z.add c.base (Z.mul i c.step)) sz)
-
-let compute_signed_index_value (c: 'a t) i = let sz = comp_size c in
-  let pval =  compute_index_value_without_mod c i in 
-  let modded_pos = Z.erem pval sz in 
-    if (Z.lt modded_pos (comp_size_with_modifier c (-1))) then modded_pos else
-      Z.sub modded_pos sz
 
  
 
@@ -396,7 +404,7 @@ let subset_of (c1: canon t) (c2: canon t) =
 let abstract_single_value (x: Z.t) ~width = create ~width:width ~step:Z.zero ~card:Z.one x
 let abstract ~width =  Z.Set.fold ~init:(bottom ~width:width) ~f:(fun accum curr -> union (abstract_single_value ~width:width curr) accum)
 
-let neg (c: canon t) = if is_bottom c then c else create ~width:c.width ~step:c.step ~card:c.card (Z.neg (compute_index_value c (Z.pred c.card)))
+let neg (c: canon t) = if is_bottom c then c else create ~width:c.width ~step:c.step ~card:c.card (Z.neg (compute_last_val c))
 
 let bin_op f (c1: canon t) (c2: canon t) = if is_bottom c1 || is_bottom c2 then bottom ~width:c1.width else f c1 c2
 

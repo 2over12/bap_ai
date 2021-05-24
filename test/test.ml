@@ -79,15 +79,21 @@ let test_canon_casec _ =
   let arbitrary_clp = QCheck.make ~print:print_clp ~shrink:shrink_clp clp_gen
 
   
-  let test_unary_operator abstract_op concrete_op concretization_function ~count = QCheck.Test.make ~count:count arbitrary_clp (fun a -> 
+  let test_unary_operator abstract_op concrete_op concretization_function reduction_function  compute_width ~count = QCheck.Test.make ~count:count arbitrary_clp (fun a -> 
     let concrete_values = concretization_function a in
-    let resulting_concrete_values = CircularLinearProgression.Z.Set.map ~f:concrete_op concrete_values in 
+    let resulting_concrete_values = CircularLinearProgression.Z.Set.map ~f:(Fn.compose (reduction_function ~width:(compute_width a)) concrete_op) concrete_values in 
     let resulting_abstract_values = abstract_op a |> concretization_function  in
     CircularLinearProgression.Z.Set.is_subset resulting_abstract_values ~of_:resulting_concrete_values
   )
 
-  let test_neg = QCheck_ounit.to_ounit2_test  (test_unary_operator CircularLinearProgression.neg CircularLinearProgression.Z.neg CircularLinearProgression.signed_concretize ~count:200)
+  let test_neg = QCheck_ounit.to_ounit2_test  (test_unary_operator CircularLinearProgression.neg CircularLinearProgression.Z.neg CircularLinearProgression.signed_concretize CircularLinearProgression.interpret_signed_value (fun a -> a.width) ~count:200)
 
+  let neg_regression _  = let initial_clp = CircularLinearProgression.create ~width:9 ~step:Z.one ~card:(Z.of_int 257) Z.zero in
+  let res_clp = CircularLinearProgression.neg initial_clp in 
+  let () = CircularLinearProgression.sexp_of_t res_clp |> Sexp.to_string |> print_endline in 
+   let resulting_values = res_clp |> CircularLinearProgression.signed_concretize |> CircularLinearProgression.Z.Set.to_list |> List.sort ~compare:CircularLinearProgression.Z.compare in 
+   let expected_values = CircularLinearProgression.Z.Set.map ~f:(Fn.compose (CircularLinearProgression.interpret_signed_value ~width:initial_clp.width)  Z.neg) (CircularLinearProgression.signed_concretize initial_clp) |> CircularLinearProgression.Z.Set.to_list |> List.sort ~compare:CircularLinearProgression.Z.compare in 
+    assert_equal ~printer:(fun s -> Sexp.List (List.map ~f:(fun a -> Sexp.Atom (Z.to_string a)) s )|>  Sexp.to_string) expected_values resulting_values
   let suite =
   "Test CLPs" >::: [
     "test_canon_casea" >:: test_canon_casea;
@@ -100,7 +106,8 @@ let test_canon_casec _ =
     "test_incision_alp_split" >:: test_incision_alp_split;
     "test_incision_alp_split_signed" >:: test_incision_alp_split_signed;
     "test_slow_alp_split_signed" >:: test_slow_alp_split_signed;
-    "test_slow_alp_split_unsigned" >:: test_slow_alp_split_unsigned;test_neg
+    "test_slow_alp_split_unsigned" >:: test_slow_alp_split_unsigned;test_neg;
+    "test_neg_regression" >:: neg_regression
   ]
 
 let () =
