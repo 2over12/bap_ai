@@ -379,7 +379,7 @@ let subset_of (c1: canon t) (c2: canon t) =
     (Z.divisible (Z.sub c1.base c2.base) d) && Z.divisible c1.step d && not (Z.geq j_1 c2.card)
     )
 
-(*TODO maybe should use Z.t*)
+(*TODO maybe should use Z.t also probably not the best abstraction of a set*)
 let abstract_single_value (x: int) ~width = create ~width:width ~step:Z.zero ~card:Z.one (Z.of_int x)
 let abstract ~width =  Int.Set.fold ~init:(bottom ~width:width) ~f:(fun accum curr -> union (abstract_single_value ~width:width curr) accum)
 
