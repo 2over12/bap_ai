@@ -96,7 +96,7 @@ let new_basei = Z.sub cl.card ib in
   let compute_index_value_without_mod (c: 'a t) i = (Z.add c.base (Z.mul i c.step))
 
 
-let interpret_unsigned_value  (pval: Z.t) ~width = let sz = comp_size_from_width ~width:width 0 in Z.erem pval sz 
+let interpret_unsigned_value  ~width (pval: Z.t)  = let sz = comp_size_from_width ~width:width 0 in Z.erem pval sz 
   let compute_index_value (c: 'a t) i = interpret_unsigned_value ~width:c.width (Z.add c.base (Z.mul i c.step))
   
   let interpret_signed_value  ~width (pval: Z.t) = 
@@ -131,6 +131,7 @@ let canonize (c: 'a t) =
 
 
 let create ~width:(width:int) ~step:(step:Z.t) ~card:(card:Z.t) (base:Z.t) =
+  assert (Z.geq card Z.zero);
   (*print_endline ("width: " ^ Int.to_string width ^ "step: " ^ Z.to_string step ^ " card: " ^ Z.to_string card ^ " base: " ^ Z.to_string base);*)
   canonize {width=width;step=step; base=base;card=card}
 

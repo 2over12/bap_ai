@@ -73,7 +73,7 @@ let test_canon_casec _ =
       ))*)
 
 
-  let clp_gen = QCheck.Gen.(let width_gen = (int_range 2 12) in
+  let clp_gen = QCheck.Gen.(let width_gen = (int_range 1 12) in
   let member_gen = map Z.of_int (graft_corners int int_corners ()) in
   let card_gen = map Z.of_int (graft_corners nat int_pos_corners ()) in
   quad width_gen member_gen member_gen card_gen
@@ -96,8 +96,13 @@ let test_canon_casec _ =
     CircularLinearProgression.Z.Set.is_subset resulting_abstract_values ~of_:resulting_concrete_values
   )
 
-  let test_neg = QCheck_ounit.to_ounit2_test  (test_unary_operator CircularLinearProgression.neg CircularLinearProgression.Z.neg CircularLinearProgression.signed_concretize CircularLinearProgression.interpret_signed_value (fun a -> a.width) ~count:200)
+  let test_unary_operator_same_width  abstract_op concrete_op concretization_function reduction_function ~count = test_unary_operator abstract_op concrete_op concretization_function reduction_function (fun a -> a.width) ~count
 
+  let test_neg = QCheck_ounit.to_ounit2_test  (test_unary_operator_same_width CircularLinearProgression.neg CircularLinearProgression.Z.neg CircularLinearProgression.signed_concretize CircularLinearProgression.interpret_signed_value ~count:200)
+
+  let test_not_signed  = QCheck_ounit.to_ounit2_test (test_unary_operator_same_width  CircularLinearProgression.not_clp CircularLinearProgression.Z.lognot CircularLinearProgression.signed_concretize CircularLinearProgression.interpret_signed_value ~count:200)
+
+  let test_not_unsigned = QCheck_ounit.to_ounit2_test (test_unary_operator_same_width  CircularLinearProgression.not_clp CircularLinearProgression.Z.lognot CircularLinearProgression.unsigned_concretize CircularLinearProgression.interpret_unsigned_value ~count:200)
   let neg_regression _  = let initial_clp = CircularLinearProgression.create ~width:9 ~step:Z.one ~card:(Z.of_int 257) Z.zero in
   let res_clp = CircularLinearProgression.neg initial_clp in 
    let resulting_values = res_clp |> CircularLinearProgression.signed_concretize |> CircularLinearProgression.Z.Set.to_list |> List.sort ~compare:CircularLinearProgression.Z.compare in 
@@ -115,7 +120,10 @@ let test_canon_casec _ =
     "test_incision_alp_split" >:: test_incision_alp_split;
     "test_incision_alp_split_signed" >:: test_incision_alp_split_signed;
     "test_slow_alp_split_signed" >:: test_slow_alp_split_signed;
-    "test_slow_alp_split_unsigned" >:: test_slow_alp_split_unsigned;test_neg;
+    "test_slow_alp_split_unsigned" >:: test_slow_alp_split_unsigned;
+    test_neg;
+    test_not_signed;
+    test_not_unsigned;
     "test_neg_regression" >:: neg_regression
   ]
 
