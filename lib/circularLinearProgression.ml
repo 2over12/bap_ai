@@ -327,8 +327,7 @@ let is_bottom (x: canon t) = equal (bottom ~width:x.width) x
 
 let top ~width = create ~width:width ~step:Z.one ~card:(Z.pow (Z.succ Z.one) width) Z.zero
 
-let u'_card b s c1 c2 = (Z.fdiv (Z.sub (Z.max (compute_index_value c1 (Z.pred c1.card) ) 
-  (compute_index_value c2 (Z.pred c2.card) )) b) s)
+let u'_card b s c1 c2 = (Z.fdiv (Z.sub (Z.max (compute_last_val c1) (compute_last_val c2)) b) s) |> Z.succ
 
 let u' (c1: canon t) (c2: canon t)= let b = Z.min c1.base c2.base in 
   let s = Z.gcd c1.step c2.step |> Z.gcd (Z.sub c1.base c2.base|> Z.abs) in 
@@ -341,7 +340,7 @@ let u' (c1: canon t) (c2: canon t)= let b = Z.min c1.base c2.base in
     if Z.equal x.card Z.one && Z.equal y.card Z.one then 
       create ~width:x.width ~card:(Z.succ Z.one) ~step:(Z.abs (Z.sub x.base y.base)) (Z.min x.base y.base)
   else
-    (* the argmin value isn tclear to me *)
+    (* the argmin value isnt clear to me *)
     u' x y
 
 

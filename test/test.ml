@@ -88,13 +88,42 @@ let test_canon_casec _ =
   
   let arbitrary_clp = QCheck.make ~print:print_clp ~shrink:shrink_clp clp_gen
 
+
+  let gen_clp_pair = QCheck.Gen.(pair clp_gen clp_gen |> map (fun ((a: CircularLinearProgression.canon CircularLinearProgression.t),(b: CircularLinearProgression.canon CircularLinearProgression.t)) 
+    -> (a,CircularLinearProgression.create ~width:a.width ~step:b.step ~card:b.card b.base)))
+
+  let print_clp_pair = QCheck.Print.pair print_clp print_clp
+
+  let shrink_clp_pair = QCheck.Shrink.pair shrink_clp shrink_clp
+
+  let arbitrary_clp_pair = QCheck.make ~print:print_clp_pair ~shrink:shrink_clp_pair gen_clp_pair
+  
   let test_unary_operator abstract_op concrete_op concretization_function reduction_function  compute_width ~count = QCheck.Test.make ~count:count arbitrary_clp (fun a -> 
     (*print_endline (CircularLinearProgression.sexp_of_t a |> Sexp.to_string);*)
     let concrete_values = concretization_function a in
     let resulting_concrete_values = CircularLinearProgression.Z.Set.map ~f:(Fn.compose (reduction_function ~width:(compute_width a)) concrete_op) concrete_values in 
     let resulting_abstract_values = abstract_op a |> concretization_function  in
-    CircularLinearProgression.Z.Set.is_subset resulting_abstract_values ~of_:resulting_concrete_values
+    CircularLinearProgression.Z.Set.is_subset resulting_concrete_values ~of_:resulting_abstract_values
   )
+
+  let merge_by_applying_op v1 v2 (c1: CircularLinearProgression.canon CircularLinearProgression.t) (c2: CircularLinearProgression.canon CircularLinearProgression.t) (f: Z.t -> Z.t -> Z.t) reduction_function compute_width = 
+    List.cartesian_product (CircularLinearProgression.Z.Set.to_list v1) (CircularLinearProgression.Z.Set.to_list v2) |> List.map ~f:(Fn.compose (reduction_function ~width:(compute_width c1 c2))  (fun (a,b) -> f a b)) 
+    |> CircularLinearProgression.Z.Set.of_list
+
+
+  let apply_binary_operator (c1: CircularLinearProgression.canon CircularLinearProgression.t) (c2: CircularLinearProgression.canon CircularLinearProgression.t)  ~concretization_function ~merge_values  = 
+    let v1 = concretization_function c1 in 
+    let v2 = concretization_function c2 in 
+    merge_values  v1 v2 c1 c2
+ 
+  
+
+  let test_binary_operator abstract_op concretization_function compute_concrete_values ~count = QCheck.Test.make ~count:count arbitrary_clp_pair (fun (c1,c2) -> 
+    let concrete_values = compute_concrete_values c1 c2 in
+    let resulting_abstract_values = abstract_op c1 c2 |> concretization_function in 
+    CircularLinearProgression.Z.Set.is_subset concrete_values  ~of_:resulting_abstract_values
+    )
+
 
   let test_unary_operator_same_width  abstract_op concrete_op concretization_function reduction_function ~count = test_unary_operator abstract_op concrete_op concretization_function reduction_function (fun a -> a.width) ~count
 
@@ -103,11 +132,36 @@ let test_canon_casec _ =
   let test_not_signed  = QCheck_ounit.to_ounit2_test (test_unary_operator_same_width  CircularLinearProgression.not_clp CircularLinearProgression.Z.lognot CircularLinearProgression.signed_concretize CircularLinearProgression.interpret_signed_value ~count:200)
 
   let test_not_unsigned = QCheck_ounit.to_ounit2_test (test_unary_operator_same_width  CircularLinearProgression.not_clp CircularLinearProgression.Z.lognot CircularLinearProgression.unsigned_concretize CircularLinearProgression.interpret_unsigned_value ~count:200)
+  
+  let test_union =QCheck_ounit.to_ounit2_test (test_binary_operator CircularLinearProgression.union CircularLinearProgression.unsigned_concretize 
+    (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 _c1 _c2 -> CircularLinearProgression.Z.Set.union v1 v2)) ~count:200)
+  
   let neg_regression _  = let initial_clp = CircularLinearProgression.create ~width:9 ~step:Z.one ~card:(Z.of_int 257) Z.zero in
   let res_clp = CircularLinearProgression.neg initial_clp in 
    let resulting_values = res_clp |> CircularLinearProgression.signed_concretize |> CircularLinearProgression.Z.Set.to_list |> List.sort ~compare:CircularLinearProgression.Z.compare in 
    let expected_values = CircularLinearProgression.Z.Set.map ~f:(Fn.compose (CircularLinearProgression.interpret_signed_value ~width:initial_clp.width)  Z.neg) (CircularLinearProgression.signed_concretize initial_clp) |> CircularLinearProgression.Z.Set.to_list |> List.sort ~compare:CircularLinearProgression.Z.compare in 
     assert_equal ~printer:(fun s -> Sexp.List (List.map ~f:(fun a -> Sexp.Atom (Z.to_string a)) s )|>  Sexp.to_string) expected_values resulting_values
+
+
+
+  let print_set s = CircularLinearProgression.Z.Set.sexp_of_t s |> Sexp.to_string
+
+  let bin_op_regression (a: CircularLinearProgression.canon CircularLinearProgression.t) (b: CircularLinearProgression.canon CircularLinearProgression.t) abs_op concretization_function concrete_combine _ = 
+    print_endline (print_clp a);
+    print_endline (print_clp b);
+    let abs_values = abs_op a b |> concretization_function in 
+    let concrete_values = concrete_combine (concretization_function a) (concretization_function b) in 
+    assert_bool ((print_set concrete_values) ^ "\n" ^(print_set abs_values)) (CircularLinearProgression.Z.Set.is_subset concrete_values  ~of_:abs_values)
+
+  
+  let create_union_regression a b =  bin_op_regression a b CircularLinearProgression.union CircularLinearProgression.unsigned_concretize CircularLinearProgression.Z.Set.union
+
+  let union_regression = let a =  CircularLinearProgression.create ~width:6 ~step:(Z.of_int 16) ~card:(Z.of_int 2) (Z.of_int 10) in
+      let b = CircularLinearProgression.create ~width:6 ~step:Z.zero  ~card:Z.one Z.zero in
+      create_union_regression a b
+    
+  let union_regression2 = create_union_regression (CircularLinearProgression.create ~width:11 ~card:(Z.of_int 3) ~step:(Z.of_int 866) (Z.of_int 855)) (CircularLinearProgression.create ~width:11 ~card:(Z.of_int 1) ~step:(Z.of_int 0) (Z.of_int 41))
+
   let suite =
   "Test CLPs" >::: [
     "test_canon_casea" >:: test_canon_casea;
@@ -124,6 +178,9 @@ let test_canon_casec _ =
     test_neg;
     test_not_signed;
     test_not_unsigned;
+    test_union;
+    "union_regression" >:: union_regression;
+    "union_regression2" >:: union_regression2;
     "test_neg_regression" >:: neg_regression
   ]
 
