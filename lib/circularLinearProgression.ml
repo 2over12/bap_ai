@@ -31,7 +31,7 @@ let pr_obj a b = Sexp.List [Sexp.Atom a; Sexp.Atom b]
 let sexp_of_t (v: 'a t)  = Sexp.List [pr_obj "base" (Z.to_string v.base);pr_obj "step" (Z.to_string v.step);pr_obj "card" (Z.to_string v.card); pr_obj "width" (Int.to_string v.width)]
 let t_of_sexp (v:Sexp.t) = raise (Failure "") (* TODO parse the thing*)
 
-
+module T = struct
 include Comparable.Make(struct 
   type t =  canon t'
 
@@ -41,6 +41,10 @@ include Comparable.Make(struct
 
   let compare  = compare (fun _ _ -> 0)
 end)
+end
+
+include T
+
 
 
 
@@ -772,3 +776,4 @@ else
   let less_than_signed (c1: canon t) (c2: canon t) = generalized_less_than max_s_value min_s_value
 
   let less_than_unsigned (c1: canon t) (c2: canon t) = generalized_less_than max_u_value min_u_value
+

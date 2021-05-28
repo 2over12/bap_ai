@@ -1,0 +1,1 @@
+module MakeProduct(X: AbstractDomain.SET)(Y: AbstractDomain.CPO): CPO
