@@ -2,10 +2,9 @@ open Bap.Std
 
 
 (*
-Boolean variables are represented by an Envrionment s.t. bvar is true
+this is kinda weird cause the only thing affected is going to be constraints on the global value of involved variables
+
+this does avoid code reuse
 *)
-module Env = MapDomain.MakeMap(Var)(ClpDomain)
 
-
-
-module Immediates = ReducedProduct.MakeProduct(Env)(MapDomain.MakeMap(Var)(Env))
+module BooleanImmediates = MapDomain.MakeMap(Var)(ProductDomain.MakeProduct(ValueStore.AbstractStore)(ValueStore.AbstractStore))
