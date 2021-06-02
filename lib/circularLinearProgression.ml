@@ -797,7 +797,7 @@ else
 
   let limit_lt_with_modifier(c1: canon t) (c2: canon t) ~is_signed ~modifier = 
     let mu = if is_signed then max_s c2 else max_u c2 in 
-    limit_to_range c1 ~lower:(min_from_width ~width:c1.width ~is_signed:is_signed) ~upper:(modifier mu)
+    limit_to_range c1 ~lower:(min_from_width ~width:c1.width ~is_signed:is_signed) ~upper:(modifier mu) ~is_signed:is_signed
 
   let limit_lte_unsigned = limit_lt_with_modifier ~is_signed:false ~modifier:Z.succ
 
@@ -810,7 +810,7 @@ else
 
   let limit_gt_with_modifier (c1: canon t) (c2: canon t)  ~is_signed ~modifier = 
     let mu =if is_signed then min_s c2 else min_u c2 in
-    limit_to_range c1 ~lower:(modifier mu) ~upper:(max_from_width ~width:c1.width ~is_signed:is_signed)
+    limit_to_range c1 ~lower:(modifier mu) ~upper:(max_from_width ~width:c1.width ~is_signed:is_signed) ~is_signed:is_signed
 
 
   let limit_gt_unsigned = limit_gt_with_modifier ~is_signed:false ~modifier:Z.succ
