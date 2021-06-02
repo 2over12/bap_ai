@@ -140,8 +140,8 @@ let denote_def  (d: Def.t) (pred: VsaDom.t): VsaDom.t =
   let assignee  = Def.lhs d in
   let (imms, vs) = pred in 
   if is_bool assignee then  
-    (Var.Map.update imms assignee
-    ~f:(fun _ -> denote_exp_as_bool (Def.rhs d) pred), vs)
+    (Var.Map.set imms ~key:assignee
+    ~data:(denote_exp_as_bool (Def.rhs d) pred) , vs)
   else
   (*if we arent updating a boolean *)
   let denote_def' : ValueStore.AbstractStore.t -> ValueStore.AbstractStore.t = raise (Failure "havent implemented def denotations yet")
