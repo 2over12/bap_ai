@@ -1,1 +1,1 @@
-include AbstractDomain.CPO
+include AbstractDomain.CPO with type t = CircularLinearProgression.canon CircularLinearProgression.t

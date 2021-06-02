@@ -773,7 +773,51 @@ else
   else 
     top ~width:1
 
-  let less_than_signed (c1: canon t) (c2: canon t) = generalized_less_than max_s_value min_s_value
+  let less_than_signed = generalized_less_than max_s_value min_s_value
 
-  let less_than_unsigned (c1: canon t) (c2: canon t) = generalized_less_than max_u_value min_u_value
+  let less_than_unsigned = generalized_less_than max_u_value min_u_value
+
+  let generic_lte x y ~f = f x (add y (create ~width:x.width ~step:Z.zero ~card:Z.one Z.one)) 
+  let lte_unsigned = generic_lte ~f:less_than_unsigned
+  let lte_signed = generic_lte ~f:less_than_signed
+
+  let max_from_width ~width ~is_signed = let sz =  comp_size_from_width ~width:width (if is_signed then (-1) else 0) in Z.pred sz
+  let min_from_width ~width ~is_signed = if is_signed then Z.zero else (comp_size_from_width ~width:width (-1) |> Z.neg)
+
+  (*upper is exclusive*)
+  let limit_to_range (c: canon t) ~is_signed ~lower:(l: Z.t) ~upper:(u: Z.t) = 
+    let inclusive_upper = Z.pred u in
+    let bottom_bound = Z.max l (min_from_width ~is_signed:is_signed ~width:c.width) in 
+    let top_value = Z.min inclusive_upper (max_from_width ~width:c.width ~is_signed:is_signed) in
+    intersection (create ~width:c.width ~card:(Z.sub top_value bottom_bound) ~step:Z.one bottom_bound) c
+
+
+
+
+
+  let limit_lt_with_modifier(c1: canon t) (c2: canon t) ~is_signed ~modifier = 
+    let mu = if is_signed then max_s c2 else max_u c2 in 
+    limit_to_range c1 ~lower:(min_from_width ~width:c1.width ~is_signed:is_signed) ~upper:(modifier mu)
+
+  let limit_lte_unsigned = limit_lt_with_modifier ~is_signed:false ~modifier:Z.succ
+
+  let limit_lt_unsigned = limit_lt_with_modifier ~is_signed:false ~modifier:(fun x -> x)
+
+  let limit_lt_signed = limit_lt_with_modifier ~is_signed:true ~modifier:(fun x -> x)
+
+  let limit_lte_signed = limit_lt_with_modifier ~is_signed:true ~modifier:Z.succ
+
+
+  let limit_gt_with_modifier (c1: canon t) (c2: canon t)  ~is_signed ~modifier = 
+    let mu =if is_signed then min_s c2 else min_u c2 in
+    limit_to_range c1 ~lower:(modifier mu) ~upper:(max_from_width ~width:c1.width ~is_signed:is_signed)
+
+
+  let limit_gt_unsigned = limit_gt_with_modifier ~is_signed:false ~modifier:Z.succ
+
+  let limit_gte_unsigned = limit_lt_with_modifier ~is_signed:false ~modifier:(fun x -> x)
+
+  let limit_gt_signed = limit_lt_with_modifier ~is_signed:true ~modifier:Z.succ
+
+  let limit_gte_signed = limit_lt_with_modifier ~is_signed:true ~modifier:(fun x -> x)
 

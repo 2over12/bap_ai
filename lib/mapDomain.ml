@@ -27,31 +27,33 @@ module MakeMap(X: AbstractDomain.SET)(Y: AbstractDomain.CPO) = struct
 
   let checked_op (f: Y.t -> Y.t -> Y.t) x y = let res = f x y in if (Poly.(=) res Y.bot) then None else Some res
 
-  let pairwise_function_inclusive (f: Y.t -> Y.t -> Y.t) x y = pairwise_function (fun x' y' -> match(x',y') with 
+  let pairwise_function_inclusive ~f:(f: Y.t -> Y.t -> Y.t) x y = pairwise_function (fun x' y' -> match(x',y') with 
   | (None, None) -> None
   | (Some x', None) -> Some x'
   | (None, Some y') -> Some y'
   | (Some x',Some y') ->  checked_op f x' y') x y
 
 
-  let pairwise_function_exclusive (f: Y.t -> Y.t -> Y.t) x y = pairwise_function (fun x' y' -> match(x',y') with 
+  let pairwise_function_exclusive ~f:(f: Y.t -> Y.t -> Y.t) x y = pairwise_function (fun x' y' -> match(x',y') with 
   | (_, None) -> None
   | (None, _) -> None
   | (Some x',Some y') -> checked_op f x' y') x y
   let bot = X.Map.empty
 
   let narrow x y = 
-    pairwise_function_inclusive Y.narrow x y 
+    pairwise_function_inclusive ~f:Y.narrow x y 
 
-  let widen x y = pairwise_function_inclusive Y.widen x y
+  let widen x y = pairwise_function_inclusive ~f:Y.widen x y
 
-  let join x y = pairwise_function_inclusive Y.join x y 
+  let join x y = pairwise_function_inclusive ~f:Y.join x y 
 
-  let meet x y = pairwise_function_exclusive Y.meet x y 
+  let meet x y = pairwise_function_exclusive ~f:Y.meet x y 
 
   let le x y = x<= y
 
   let eq = X.Map.equal Y.eq
+  
 
+  let get m x = X.Map.find m x |> Option.value ~default:Y.bot
 end
 
