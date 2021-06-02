@@ -32,25 +32,88 @@ let is_bool (v: Var.t) = Var.typ v |> function
 module BoolDom = ProductDomain.MakeProduct(ValueStore.AbstractStore)(ValueStore.AbstractStore)
 
 
-let denote_comp (comp: binop) (lh: ValueStore.ValueSet.t) (rh:  ValueStore.ValueSet.t) = 
-let op_to_apply = 
-match comp with 
-| EQ -> CircularLinearProgression.intersection
-| NEQ -> raise (Failure "need to implement set difference to apply this constraint")
-| LT -> CircularLinearProgression.less_than_unsigned
-| LE -> CircularLinearProgression.lte_unsigned
-| SLT -> CircularLinearProgression.less_than_signed
-| SLE -> CircularLinearProgression.lte_signed
-| _ -> raise (Failure "impossible")
-in 
-  ValueStore.ValueSet.pairwise_function_inclusive ~f:(op_to_apply) lh rh
 
 
 
-let handle_predicate (comp: binop) (lh: exp) (rh: exp) (vs: ValueStore.AbstractStore.t): BoolDom.t = match (lh,rh) with 
-  | (Bil.Var lv, Bil.Var rv) -> (vs,vs)
-  | (Bil.Var lv, Bil.Int ri) -> (vs, vs)
-  | (Bil.Int li, Bil.Var rv) -> (vs, vs)
+
+let binop_to_comp  (comp: binop) = match comp with 
+  | EQ -> `EQ
+  | NEQ -> `NEQ
+  | LT -> `LT
+  | LE -> `LE
+  | SLT -> `SLT
+  | SLE -> `SLE
+  | _ -> raise (Failure "not a comparison operator")
+
+
+let neg_of_comp = function
+  | `EQ -> `NEQ
+  | `NEQ -> `EQ
+  | `LT -> `GE
+  | `LE -> `GT
+  | `SLT -> `SGE
+  | `SLE -> `SGT
+  | `GE -> `LT
+  | `GT -> `LE
+  | `SGE -> `SLT 
+  | `SGT -> `SLE
+
+
+  let get_comp_fun = function 
+    | `EQ -> CircularLinearProgression.intersection
+    | `NEQ -> raise (Failure "need to implement set difference")
+    | `LT -> CircularLinearProgression.limit_lt_unsigned
+    | `LE -> CircularLinearProgression.limit_lte_unsigned
+    | `SLT -> CircularLinearProgression.limit_lt_signed
+    | `SLE -> CircularLinearProgression.limit_lte_signed
+    | `GE -> CircularLinearProgression.limit_gte_unsigned
+    | `GT -> CircularLinearProgression.limit_gt_unsigned
+    | `SGE -> CircularLinearProgression.limit_gte_signed
+    | `SGT -> CircularLinearProgression.limit_gt_signed
+
+let denote_comp with_op to_limit with_val = let op_fun = ValueStore.ValueSet.pairwise_function_inclusive ~f:(get_comp_fun with_op) in op_fun to_limit with_val
+
+let constrain_var (v: var) (curr_store: ValueStore.AbstractStore.t) with_op (with_val: ValueStore.ValueSet.t) =
+    let v_val = ValueStore.AbstractStore.get curr_store (ValueStore.ALoc.Var v) in 
+   ValueStore.ALoc.Map.set curr_store ~key:(ValueStore.ALoc.Var v) ~data:(denote_comp with_op v_val with_val)
+    
+
+
+let flip_comp = function 
+| `EQ -> `EQ
+| `NEQ -> `NEQ
+| `LT -> `GT
+| `LE -> `GE
+| `SLT -> `SGT
+| `SLE -> `SGE
+| `GE-> `LE
+| `GT -> `LT
+| `SGE -> `SLE
+| `SGT ->  `SLT
+
+
+
+
+let limit_var lv vs with_op (with_val: word) = 
+  constrain_var lv vs with_op (ValueStore.ValueSet.abstract_constant with_val)
+
+
+let limit_two_vars comp lv rv vs =   let constrained_by_left = constrain_var lv vs comp (ValueStore.AbstractStore.get vs (ValueStore.ALoc.Var rv)) in
+let constrained_by_right = constrain_var rv constrained_by_left (flip_comp comp) (ValueStore.AbstractStore.get vs (ValueStore.ALoc.Var rv))
+in constrained_by_right
+
+
+
+let handle_predicate (comp: binop) (lh: exp) (rh: exp) (vs: ValueStore.AbstractStore.t): BoolDom.t =
+  let comp = binop_to_comp comp in   
+  match (lh,rh) with 
+  | (Bil.Var lv, Bil.Var rv) -> (
+  limit_two_vars comp lv rv vs,limit_two_vars (neg_of_comp comp) lv rv vs)
+  | (Bil.Var lv, Bil.Int ri) -> (limit_var lv vs comp ri , limit_var lv vs (neg_of_comp comp) ri)
+  | (Bil.Int li, Bil.Var rv) ->
+    let flipped = flip_comp comp in 
+    
+    (limit_var rv vs flipped li, limit_var rv vs (neg_of_comp flipped) li)
   | _ -> (vs,vs)
 
 let rec denote_exp_as_bool (e: Exp.t) (pred: VsaDom.t): BoolDom.t =

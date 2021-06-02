@@ -28,7 +28,15 @@ module ALoc = struct
   include T
 end
 
-module ValueSet = MapDomain.MakeMap(MemoryRegion)(ClpDomain) 
+module ValueSet = struct
+ include MapDomain.MakeMap(MemoryRegion)(ClpDomain) 
 
+ let abstract_constant (w: word) = 
+  (let v = CircularLinearProgression.abstract_single_value ~width:(Word.bitwidth w) (Word.to_int64 w |> Stdlib.Result.get_ok |> Z.of_int64) in
+  MemoryRegion.Map.of_alist_exn [(MemoryRegion.Global,v)])
+
+
+
+end
 
 module AbstractStore = MapDomain.MakeMap(ALoc)(ValueSet)
