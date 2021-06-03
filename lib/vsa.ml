@@ -193,7 +193,8 @@ let rec denote_value_exp (first_exp: Exp.t) (vsa_dom: VsaDom.t): ValueStore.Valu
    | Ite (b, th, el) -> let (tres,fres) = denote_exp_as_bool b vsa_dom in ValueStore.ValueSet.join (denote_value_exp th (immenv,tres))  (denote_value_exp el (immenv,fres))
    | Cast (cast_ty, width, e) -> let evaluated = denote_value_exp e vsa_dom in exec_cast_on cast_ty evaluated width
    | Unknown _ -> raise (Failure "something failed to lift")
-   
+   | Extract (lower, upper,e) -> let res = denote_value_exp e vsa_dom in ValueStore.MemoryRegion.Map.map ~f:(CircularLinearProgression.extract lower upper) res
+   | Concat (e1,e2) -> let e1 = denote_value_exp e1 vsa_dom in let e2 = denote_value_exp e2 vsa_dom in ValueStore.ValueSet.pairwise_function_inclusive ~f:CircularLinearProgression.concat e1 e2
 let denote_def  (d: Def.t) (pred: VsaDom.t): VsaDom.t = 
   let assignee  = Def.lhs d in
   let (imms, vs) = pred in 

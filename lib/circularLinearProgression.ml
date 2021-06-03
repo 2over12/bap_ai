@@ -871,3 +871,13 @@ else
 
   (* can just use shrink low but right shift the difference*)
   let shrink_high ~width (c:  canon t) = right_shift_unsigned c (abstract_single_value ~width:c.width (Z.of_int (c.width - width))) |> shrink_low ~width:width 
+
+
+  let extract lu up (c: canon t) = right_shift_unsigned c (abstract_single_value  ~width:c.width (Z.of_int lu)) |> shrink_low ~width:(c.width - up)
+
+
+  let concat (c1: canon t) (c2:canon t) = 
+    let nwidth = c1.width + c2.width in 
+    let nc1 = zero_extend ~width:nwidth c1 in
+    let nc2 = zero_extend ~width:nwidth c2 in 
+      left_shift nc1 (abstract_single_value (Z.of_int c2.width) ~width:nwidth) |> logor nc2
