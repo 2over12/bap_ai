@@ -134,8 +134,55 @@ let rec denote_exp_as_bool (e: Exp.t) (pred: VsaDom.t): BoolDom.t =
         | EQ | NEQ |LT | LE |SLT |SLE -> handle_predicate op l r vs
         | _ -> (*welp we are screwed for now so*) (vs,vs))
     |_ -> (vs,vs)
-                                                                                                                                                                                                                                                                                                                                               
+            
+let denote_bin_op (op: binop) (s1: ValueStore.ValueSet.t) (s2: ValueStore.ValueSet.t):  ValueStore.ValueSet.t  =
+  let f = match op with 
+      | PLUS -> CircularLinearProgression.add 
+      | MINUS -> CircularLinearProgression.sub
+      | TIMES -> CircularLinearProgression.unsigned_mul 
+      | DIVIDE -> CircularLinearProgression.unsigned_div
+      | SDIVIDE -> CircularLinearProgression.signed_div
+      | MOD -> CircularLinearProgression.unsigned_modulo
+      | SMOD -> CircularLinearProgression.signed_modulo
+      | RSHIFT -> CircularLinearProgression.right_shift_unsigned
+      | ARSHIFT -> CircularLinearProgression.right_shift_signed
+      | AND -> CircularLinearProgression.logand
+      | OR -> CircularLinearProgression.logor
+      | XOR -> CircularLinearProgression.logxor
+      | EQ -> CircularLinearProgression.equality
+      | NEQ -> CircularLinearProgression.not_equal
+      | LT -> CircularLinearProgression.less_than_unsigned
+      | LE -> CircularLinearProgression.lte_unsigned
+      | SLT -> CircularLinearProgression.less_than_signed
+      | SLE -> CircularLinearProgression.lte_signed
+      | LSHIFT -> CircularLinearProgression.left_shift
+    in 
+    ValueStore.ValueSet.pairwise_function_inclusive ~f:f s1 s2
 
+let denote_un_op (op: unop) (s: ValueStore.ValueSet.t): ValueStore.ValueSet.t = let f = match op with 
+  | NEG -> CircularLinearProgression.neg
+  | NOT -> CircularLinearProgression.not_clp
+  in
+    ValueStore.MemoryRegion.Map.map ~f:f s
+
+
+
+
+let rec denote_value_exp (e: Exp.t) (vsa_dom: VsaDom.t): ValueStore.ValueSet.t = 
+  let (immenv, pred) = vsa_dom in 
+  match e with 
+   | Int w -> ValueStore.ValueSet.abstract_constant w
+   | Var v -> ValueStore.AbstractStore.get  pred (ValueStore.ALoc.Var v)
+   | Let (v,e1,e2) ->
+    if is_bool v then 
+      let bs = denote_exp_as_bool e1 vsa_dom in 
+        let new_imenv = Var.Map.set immenv ~key:v ~data:bs in denote_value_exp e2 (new_imenv,pred)
+    else
+      let new_bindings = ValueStore.ALoc.Map.set pred ~key:(ValueStore.ALoc.Var v) ~data:(denote_value_exp e1 vsa_dom) in denote_value_exp e2 (immenv,new_bindings) (*todo this is probably wrong for binding booleans*)
+   | BinOp (op, e1, e2) -> denote_bin_op op (denote_value_exp e1 vsa_dom) (denote_value_exp e2 vsa_dom)
+   | UnOp (op, e) -> denote_un_op op (denote_value_exp e vsa_dom)
+   | Ite (b, th, el) -> let (tres,fres) = denote_exp_as_bool b vsa_dom in ValueStore.ValueSet.join (denote_value_exp th (immenv,tres))  (denote_value_exp el (immenv,fres))
+   | Unknown _ -> raise (Failure "something failed to lift")
 let denote_def  (d: Def.t) (pred: VsaDom.t): VsaDom.t = 
   let assignee  = Def.lhs d in
   let (imms, vs) = pred in 
@@ -144,5 +191,6 @@ let denote_def  (d: Def.t) (pred: VsaDom.t): VsaDom.t =
     ~data:(denote_exp_as_bool (Def.rhs d) pred) , vs)
   else
   (*if we arent updating a boolean *)
-  let denote_def' : ValueStore.AbstractStore.t -> ValueStore.AbstractStore.t = raise (Failure "havent implemented def denotations yet")
+  let denote_def' (pred : ValueStore.AbstractStore.t): ValueStore.AbstractStore.t = 
+    raise (Failure "unimplemented")
 in (Var.Map.map imms ~f:(fun (t,f) -> denote_def' t,  denote_def' f) , denote_def' vs)

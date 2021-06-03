@@ -777,6 +777,14 @@ else
 
   let less_than_unsigned = generalized_less_than max_u_value min_u_value
 
+  let lte_of_lt ~lt (c1: canon t) (c2: canon t)= lt c1 (add c2 (abstract_single_value Z.one ~width:c1.width))
+
+  let lte_signed = lte_of_lt ~lt:less_than_signed
+
+  let lte_unsigned = lte_of_lt ~lt:less_than_unsigned
+
+  
+
   let generic_lte x y ~f = f x (add y (create ~width:x.width ~step:Z.zero ~card:Z.one Z.one)) 
   let lte_unsigned = generic_lte ~f:less_than_unsigned
   let lte_signed = generic_lte ~f:less_than_signed
