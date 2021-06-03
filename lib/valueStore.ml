@@ -53,9 +53,9 @@ end
 module AbstractStore = MapDomain.MakeMap(ALoc)(ValueSet)
 
 
-
-module AlocMap = struct
-  type t = LocationDescription.Set.t MemoryRegion.Map.t
+(*stores results of preanalysis*)
+module ALocMap = struct
+  type t = LocationDescription.Set.t MemoryRegion.Map.t * Tid.Set.t
 
 
   let get_nearest (x: Z.t) (addrs: ClpDomain.t)= let (_,(ic,zeta)) = CircularLinearProgression.compute_gap_width_ex addrs x in CircularLinearProgression.compute_index_value addrs ic
@@ -73,7 +73,7 @@ module AlocMap = struct
       )
     
   
-  let deref (alocs: t) (vs: ValueSet.t) (sz: int) = 
+  let deref ((alocs,_): t) (vs: ValueSet.t) (sz: int) = 
     MemoryRegion.Map.fold2 alocs vs ~init:([],[]) ~f:(fun ~key ~data fp -> 
       match data with
       | `Left _ -> fp

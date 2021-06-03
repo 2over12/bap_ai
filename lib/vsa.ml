@@ -175,9 +175,34 @@ let exec_cast_on (ctype: cast) (v: ValueStore.ValueSet.t) (target_width: int) = 
 in
   ValueStore.MemoryRegion.Map.map ~f:f v
 
+let contains_no_heap_objects (access_list: ValueStore.ALoc.t list) = 
+  not (List.exists 
+  
+  ~f:(function  
+    | Var _ -> false
+    | Mem (Heap _,_) -> true
+    | Mem _ -> false)  access_list)
+
+let contains_no_recursive_objects (access_list: ValueStore.ALoc.t list) (non_rec_procs: Tid.Set.t) = 
+  List.for_all ~f:(function 
+  | Var _ -> true
+  | Mem (Heap _, _) -> true
+  | Mem (Stack t,_) -> Tid.Set.mem non_rec_procs t
+  | Mem (Global _,_) -> true 
+  ) access_list
+
+let can_strong_update (fully_accssed: ValueStore.ALoc.t list) (partially_accesed: ValueStore.ALoc.t list) ((_,non_rec_procs): ValueStore.ALocMap.t) = 
+  List.is_empty partially_accesed && List.length fully_accssed = 1 && contains_no_heap_objects fully_accssed && contains_no_recursive_objects fully_accssed non_rec_procs
 
 
-let rec denote_value_exp (first_exp: Exp.t) (vsa_dom: VsaDom.t): ValueStore.ValueSet.t = 
+let denote_load (mp: ValueStore.ALocMap.t) (pred: ValueStore.AbstractStore.t) (addr_res: ValueStore.ValueSet.t) (endianess: endian) (sz: Size.all) = 
+  let (f,p) = ValueStore.ALocMap.deref mp addr_res (Size.size_in_bytes sz) in
+    if List.is_empty p then 
+      List.map ~f:(ValueStore.AbstractStore.get pred) f |> List.reduce_exn ~f:ValueStore.ValueSet.join
+    else 
+      ValueStore.ValueSet.top
+
+let rec denote_value_exp (first_exp: Exp.t) (vsa_dom: VsaDom.t) (mp: ValueStore.ALocMap.t): ValueStore.ValueSet.t = 
   let (immenv, pred) = vsa_dom in 
   match first_exp with 
    | Int w -> ValueStore.ValueSet.abstract_constant w
@@ -185,19 +210,17 @@ let rec denote_value_exp (first_exp: Exp.t) (vsa_dom: VsaDom.t): ValueStore.Valu
    | Let (v,e1,e2) ->
     if is_bool v then 
       let bs = denote_exp_as_bool e1 vsa_dom in 
-        let new_imenv = Var.Map.set immenv ~key:v ~data:bs in denote_value_exp e2 (new_imenv,pred)
+        let new_imenv = Var.Map.set immenv ~key:v ~data:bs in denote_value_exp e2 (new_imenv,pred) mp
     else
-      let new_bindings = ValueStore.ALoc.Map.set pred ~key:(ValueStore.ALoc.Var v) ~data:(denote_value_exp e1 vsa_dom) in denote_value_exp e2 (immenv,new_bindings) 
-   | BinOp (op, e1, e2) -> denote_bin_op op (denote_value_exp e1 vsa_dom) (denote_value_exp e2 vsa_dom)
-   | UnOp (op, e) -> denote_un_op op (denote_value_exp e vsa_dom)
-   | Ite (b, th, el) -> let (tres,fres) = denote_exp_as_bool b vsa_dom in ValueStore.ValueSet.join (denote_value_exp th (immenv,tres))  (denote_value_exp el (immenv,fres))
-   | Cast (cast_ty, width, e) -> let evaluated = denote_value_exp e vsa_dom in exec_cast_on cast_ty evaluated width
+      let new_bindings = ValueStore.ALoc.Map.set pred ~key:(ValueStore.ALoc.Var v) ~data:(denote_value_exp e1 vsa_dom mp) in denote_value_exp e2 (immenv,new_bindings) mp
+   | BinOp (op, e1, e2) -> denote_bin_op op (denote_value_exp e1 vsa_dom mp) (denote_value_exp e2 vsa_dom mp)
+   | UnOp (op, e) -> denote_un_op op (denote_value_exp e vsa_dom mp)
+   | Ite (b, th, el) -> let (tres,fres) = denote_exp_as_bool b vsa_dom in ValueStore.ValueSet.join (denote_value_exp th (immenv,tres) mp)  (denote_value_exp el (immenv,fres) mp)
+   | Cast (cast_ty, width, e) -> let evaluated = denote_value_exp e vsa_dom mp in exec_cast_on cast_ty evaluated width
    | Unknown _ -> raise (Failure "something failed to lift")
-   | Extract (lower, upper,e) -> let res = denote_value_exp e vsa_dom in ValueStore.MemoryRegion.Map.map ~f:(CircularLinearProgression.extract lower upper) res
-   | Concat (e1,e2) -> let e1 = denote_value_exp e1 vsa_dom in let e2 = denote_value_exp e2 vsa_dom in ValueStore.ValueSet.pairwise_function_inclusive ~f:CircularLinearProgression.concat e1 e2
-   | _ -> raise (Failure "didnt implement memory ops")
-   (*| Load (_,addr, endianess, sz) -> let evaluted_addr = denote_value_exp addr vsa_dom in *)(*todo unclear how to handle other memory region loads*)
-
+   | Extract (lower, upper,e) -> let res = denote_value_exp e vsa_dom mp in ValueStore.MemoryRegion.Map.map ~f:(CircularLinearProgression.extract lower upper) res
+   | Concat (e1,e2) -> let e1 = denote_value_exp e1 vsa_dom mp in let e2 = denote_value_exp e2 vsa_dom mp in ValueStore.ValueSet.pairwise_function_inclusive ~f:CircularLinearProgression.concat e1 e2
+   | Load (_,addr, endianess, sz) -> let evaluted_addr = denote_value_exp addr vsa_dom mp in denote_load mp pred evaluted_addr endianess sz
 
 
 let denote_def  (d: Def.t) (pred: VsaDom.t): VsaDom.t = 
