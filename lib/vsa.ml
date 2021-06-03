@@ -167,10 +167,19 @@ let denote_un_op (op: unop) (s: ValueStore.ValueSet.t): ValueStore.ValueSet.t = 
 
 
 
+let exec_cast_on (ctype: cast) (v: ValueStore.ValueSet.t) (target_width: int) = let f = match ctype with 
+  | UNSIGNED -> CircularLinearProgression.zero_extend ~width:target_width
+  | SIGNED -> CircularLinearProgression.sign_extend ~width:target_width
+  | HIGH -> raise (Failure "not implemented yet") (*narrow keeping high bit*)
+  | LOW -> raise (Failure "not implemented yet") (*narrow keeping low bits*)
+in
+  ValueStore.MemoryRegion.Map.map ~f:f v
 
-let rec denote_value_exp (e: Exp.t) (vsa_dom: VsaDom.t): ValueStore.ValueSet.t = 
+
+
+let rec denote_value_exp (first_exp: Exp.t) (vsa_dom: VsaDom.t): ValueStore.ValueSet.t = 
   let (immenv, pred) = vsa_dom in 
-  match e with 
+  match first_exp with 
    | Int w -> ValueStore.ValueSet.abstract_constant w
    | Var v -> ValueStore.AbstractStore.get  pred (ValueStore.ALoc.Var v)
    | Let (v,e1,e2) ->
@@ -178,11 +187,13 @@ let rec denote_value_exp (e: Exp.t) (vsa_dom: VsaDom.t): ValueStore.ValueSet.t =
       let bs = denote_exp_as_bool e1 vsa_dom in 
         let new_imenv = Var.Map.set immenv ~key:v ~data:bs in denote_value_exp e2 (new_imenv,pred)
     else
-      let new_bindings = ValueStore.ALoc.Map.set pred ~key:(ValueStore.ALoc.Var v) ~data:(denote_value_exp e1 vsa_dom) in denote_value_exp e2 (immenv,new_bindings) (*todo this is probably wrong for binding booleans*)
+      let new_bindings = ValueStore.ALoc.Map.set pred ~key:(ValueStore.ALoc.Var v) ~data:(denote_value_exp e1 vsa_dom) in denote_value_exp e2 (immenv,new_bindings) 
    | BinOp (op, e1, e2) -> denote_bin_op op (denote_value_exp e1 vsa_dom) (denote_value_exp e2 vsa_dom)
    | UnOp (op, e) -> denote_un_op op (denote_value_exp e vsa_dom)
    | Ite (b, th, el) -> let (tres,fres) = denote_exp_as_bool b vsa_dom in ValueStore.ValueSet.join (denote_value_exp th (immenv,tres))  (denote_value_exp el (immenv,fres))
+   | Cast (cast_ty, width, e) -> let evaluated = denote_value_exp e vsa_dom in exec_cast_on cast_ty evaluated width
    | Unknown _ -> raise (Failure "something failed to lift")
+
 let denote_def  (d: Def.t) (pred: VsaDom.t): VsaDom.t = 
   let assignee  = Def.lhs d in
   let (imms, vs) = pred in 

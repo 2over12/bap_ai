@@ -115,6 +115,8 @@ let interpret_unsigned_value  ~width (pval: Z.t)  = let sz = comp_size_from_widt
     let pval =  compute_index_value_without_mod c i in interpret_signed_value ~width:c.width pval
 
 let compute_last_val (c:'a t) = compute_index_value c (Z.pred c.card)
+let compute_signed_last_val (c: 'a t) = compute_signed_index_value c (Z.pred c.card)
+
 let canonize (c: 'a t) =
   let k = comp_k c in
   let gap = Z.gcd c.step (comp_size c) in
@@ -784,11 +786,11 @@ else
   let lte_unsigned = lte_of_lt ~lt:less_than_unsigned
 
   
-
+(*
   let generic_lte x y ~f = f x (add y (create ~width:x.width ~step:Z.zero ~card:Z.one Z.one)) 
   let lte_unsigned = generic_lte ~f:less_than_unsigned
   let lte_signed = generic_lte ~f:less_than_signed
-
+*)
   let max_from_width ~width ~is_signed = let sz =  comp_size_from_width ~width:width (if is_signed then (-1) else 0) in Z.pred sz
   let min_from_width ~width ~is_signed = if is_signed then Z.zero else (comp_size_from_width ~width:width (-1) |> Z.neg)
 
@@ -829,3 +831,37 @@ else
 
   let limit_gte_signed = limit_lt_with_modifier ~is_signed:true ~modifier:(fun x -> x)
 
+
+  let unop_on_alps (alp_splitter: canon t -> alp t list) (c: canon t) ~f:(f:alp t -> canon t)= let alps = alp_splitter c in List.map ~f:f alps |> List.reduce ~f:union |> Option.value ~default:(bottom ~width:c.width)
+
+  let generic_extend (a: alp t) ~width = create ~width:width ~step:a.step ~card:a.card a.base
+
+  let zero_extend ~width = unop_on_alps unsigned_alps ~f:(generic_extend ~width)
+
+  (*so the trick here is alps dont wrap so indices can just be computed by incrementing the gap *)
+  let alp_fast_smallest_gap_length_from_signed (a: alp t) (tov: Z.t) = 
+    let signed_base = interpret_signed_value ~width:a.width a.base in
+     let canidate = (Z.cdiv (Z.sub tov signed_base) a.step) in
+      if Z.lt canidate a.card then Some canidate else None
+
+  (* todo this assumes alps steps are always positive, i think this is true*)    
+  let sign_extend_on_alp (a: alp t) ~target_width = 
+    assert (Z.geq a.step Z.zero);
+    let base = interpret_signed_value ~width:a.width a.base in
+    let neg_component = if Z.geq base Z.zero then bottom ~width:a.width else
+      let i_pval = alp_fast_smallest_gap_length_from_signed a Z.zero in
+      let i_last_neg = Option.value_map ~f:(fun i -> Z.pred i) ~default:(Z.pred a.card) i_pval in
+      let neg_card = Z.succ i_last_neg (*the cardnality is going to be the negative index + 1*) in 
+      create ~width:target_width ~step:a.step ~card:neg_card base
+    in
+    let pos_component = if Z.lt (compute_signed_last_val a) Z.zero then bottom ~width:a.width else
+      let i_pval = alp_fast_smallest_gap_length_from_signed a Z.zero |> Option.value_exn in (*a positive index must exist*)
+      let pos_base = compute_signed_index_value a i_pval in 
+      let pos_step = a.step in 
+      let pos_card = Z.sub a.card i_pval in 
+      create ~width:target_width ~step:pos_step ~card:pos_card pos_base
+
+    in
+    union pos_component neg_component
+
+  let sign_extend ~width = unop_on_alps signed_alps ~f:(generic_extend ~width)
