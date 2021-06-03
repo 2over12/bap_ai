@@ -881,3 +881,4 @@ else
     let nc1 = zero_extend ~width:nwidth c1 in
     let nc2 = zero_extend ~width:nwidth c2 in 
       left_shift nc1 (abstract_single_value (Z.of_int c2.width) ~width:nwidth) |> logor nc2
+

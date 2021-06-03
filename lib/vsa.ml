@@ -195,6 +195,11 @@ let rec denote_value_exp (first_exp: Exp.t) (vsa_dom: VsaDom.t): ValueStore.Valu
    | Unknown _ -> raise (Failure "something failed to lift")
    | Extract (lower, upper,e) -> let res = denote_value_exp e vsa_dom in ValueStore.MemoryRegion.Map.map ~f:(CircularLinearProgression.extract lower upper) res
    | Concat (e1,e2) -> let e1 = denote_value_exp e1 vsa_dom in let e2 = denote_value_exp e2 vsa_dom in ValueStore.ValueSet.pairwise_function_inclusive ~f:CircularLinearProgression.concat e1 e2
+   | _ -> raise (Failure "didnt implement memory ops")
+   (*| Load (_,addr, endianess, sz) -> let evaluted_addr = denote_value_exp addr vsa_dom in *)(*todo unclear how to handle other memory region loads*)
+
+
+
 let denote_def  (d: Def.t) (pred: VsaDom.t): VsaDom.t = 
   let assignee  = Def.lhs d in
   let (imms, vs) = pred in 
