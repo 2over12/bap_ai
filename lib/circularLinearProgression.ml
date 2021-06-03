@@ -865,3 +865,9 @@ else
     union pos_component neg_component
 
   let sign_extend ~width = unop_on_alps signed_alps ~f:(generic_extend ~width)
+
+
+  let shrink_low ~width (c:  canon t)= create ~width:width ~step:c.step ~card:c.card c.base
+
+  (* can just use shrink low but right shift the difference*)
+  let shrink_high ~width (c:  canon t) = right_shift_unsigned c (abstract_single_value ~width:c.width (Z.of_int (c.width - width))) |> shrink_low ~width:width 
