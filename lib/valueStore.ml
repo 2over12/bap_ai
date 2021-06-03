@@ -82,7 +82,7 @@ module AlocMap = struct
         let accessed = get_accessed_alocs lset addr in
         List.partition_map accessed ~f:(fun access -> 
           match access with 
-          | `Aligned loc -> let aloc = ALoc.Mem (key,loc) in if Option.is_some loc && (Option.value_exn loc.size) = sz then Either.First aloc else Either.Second aloc
+          | `Aligned loc -> let aloc = ALoc.Mem (key,loc) in if Option.is_some loc.size && (Option.value_exn loc.size) = sz then Either.First aloc else Either.Second aloc
           | `Misaligned loc ->  let aloc = ALoc.Mem (key,loc) in Either.Second aloc
           )
       )
