@@ -40,7 +40,8 @@ module ALoc = struct
 end
 
 module ValueSet = struct
- include MapDomain.MakeMap(MemoryRegion)(ClpDomain) 
+ include CompleteLattice.LatFromCPO(MapDomain.MakeMap(MemoryRegion)(ClpDomain))
+  
 
  let abstract_constant (w: word) = 
   (let v = CircularLinearProgression.abstract_single_value ~width:(Word.bitwidth w) (Word.to_int64 w |> Stdlib.Result.get_ok |> Z.of_int64) in
@@ -72,8 +73,16 @@ module ALocMap = struct
         None 
       )
     
+
+
+  let location_set_to_alocs (rgn: MemoryRegion.t) (loc_set: LocationDescription.Set.t) = 
+    LocationDescription.Set.fold ~init:[] ~f:(fun lst desc  -> (ALoc.Mem (rgn, desc))::lst) loc_set
+
+
+  let aloc_map_to_alocs (m: LocationDescription.Set.t MemoryRegion.Map.t) = MemoryRegion.Map.fold ~f:(fun ~key:rgn ~data:loc_set total -> location_set_to_alocs rgn loc_set @ total) ~init:[] m
   
-  let deref ((alocs,_): t) (vs: ValueSet.t) (sz: int) = 
+  let deref ((alocs,_): t) (maybe_vs: ValueSet.t) (sz: int) = 
+    ValueSet.fmap ~default:([],aloc_map_to_alocs alocs) ~f:(fun vs ->
     MemoryRegion.Map.fold2 alocs vs ~init:([],[]) ~f:(fun ~key ~data fp -> 
       match data with
       | `Left _ -> fp
@@ -85,5 +94,5 @@ module ALocMap = struct
           | `Aligned loc -> let aloc = ALoc.Mem (key,loc) in if Option.is_some loc.size && (Option.value_exn loc.size) = sz then Either.First aloc else Either.Second aloc
           | `Misaligned loc ->  let aloc = ALoc.Mem (key,loc) in Either.Second aloc
           )
-      )
+      ))
 end

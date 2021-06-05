@@ -2,7 +2,10 @@ open Core_kernel
 
 module LatFromCPO(X: AbstractDomain.CPO): sig
   include AbstractDomain.LAT
+  val fmap: t -> f:(X.t -> 'a)  -> default:'a -> 'a
 end = struct 
+
+
 
   module T = struct 
   type t =  | Top 
@@ -11,6 +14,11 @@ end = struct
 
   include Comparable.Make(T)
   include T
+
+  let fmap (elem:t) ~f:(f: X.t -> 'a) ~default:(default:'a) = match elem with 
+    | Top -> default
+    | Below x -> f x
+
   let top = Top  
   let widen a1 a2 = match (a1,a2) with 
     | (Top,_) -> Top
