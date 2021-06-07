@@ -195,12 +195,25 @@ let can_strong_update (fully_accssed: ValueStore.ALoc.t list) (partially_accesed
   List.is_empty partially_accesed && List.length fully_accssed = 1 && contains_no_heap_objects fully_accssed && contains_no_recursive_objects fully_accssed non_rec_procs
 
 
-let denote_load (mp: ValueStore.ALocMap.t) (pred: ValueStore.AbstractStore.t) (addr_res: ValueStore.ValueSet.t) (endianess: endian) (sz: Size.all) = 
+  (* TODO handle endianess*)
+let denote_load (mp: ValueStore.ALocMap.t) (pred: ValueStore.AbstractStore.t) (addr_res: ValueStore.ValueSet.t) (_endianess: endian) (sz: Size.all) = 
   let (f,p) = ValueStore.ALocMap.deref mp addr_res (Size.size_in_bytes sz) in
     if List.is_empty p then 
       List.map ~f:(ValueStore.AbstractStore.get pred) f |> List.reduce_exn ~f:ValueStore.ValueSet.join
     else 
       ValueStore.ValueSet.top
+    
+let denote_store  (mp: ValueStore.ALocMap.t) (pred: ValueStore.AbstractStore.t) (addr_res: ValueStore.ValueSet.t) (value_res: ValueStore.ValueSet.t) (_endianess: endian) (sz: Size.all) = 
+      let (f,p) =  ValueStore.ALocMap.deref mp addr_res (Size.size_in_bytes sz) in
+      let should_strong = can_strong_update f p mp in 
+      let handled_faccess = List.fold ~init:pred ~f:(fun store aloc  -> let new_data = if should_strong then value_res else 
+          let previous_value = ValueStore.AbstractStore.get pred aloc in ValueStore.ValueSet.join previous_value value_res
+        in ValueStore.ALoc.Map.set store ~key:aloc ~data:new_data
+          ) f in 
+      List.fold ~init:handled_faccess ~f:(fun store aloc -> ValueStore.ALoc.Map.set store ~key:aloc ~data:ValueStore.ValueSet.top) p
+      
+
+
 
 let rec denote_value_exp (first_exp: Exp.t) (vsa_dom: VsaDom.t) (mp: ValueStore.ALocMap.t): ValueStore.ValueSet.t = 
   let (immenv, pred) = vsa_dom in 
@@ -221,9 +234,19 @@ let rec denote_value_exp (first_exp: Exp.t) (vsa_dom: VsaDom.t) (mp: ValueStore.
    | Extract (lower, upper,e) -> let res = denote_value_exp e vsa_dom mp in ValueStore.ValueSet.apply_function ~f:(CircularLinearProgression.extract lower upper) res
    | Concat (e1,e2) -> let e1 = denote_value_exp e1 vsa_dom mp in let e2 = denote_value_exp e2 vsa_dom mp in ValueStore.ValueSet.pairwise_function_inclusive ~f:CircularLinearProgression.concat e1 e2
    | Load (_,addr, endianess, sz) -> let evaluted_addr = denote_value_exp addr vsa_dom mp in denote_load mp pred evaluted_addr endianess sz
+   | Store (_mem, _addr, _value, _endianess, _sz) ->  raise (Failure "store is not a value expression")
 
+type evaluated_expr = 
+      | Value of ValueStore.ValueSet.t
+      | NewEnv of ValueStore.AbstractStore.t 
 
-let denote_def  (d: Def.t) (pred: VsaDom.t): VsaDom.t = 
+let denote_expr (first_exp: Exp.t) (vsa_dom: VsaDom.t) (mp: ValueStore.ALocMap.t): evaluated_expr = 
+  let (immenv, pred) = vsa_dom in 
+  match first_exp with 
+    | Store  (_mem, addr, value, endianess, sz)  -> let evaluated_addr = denote_value_exp addr vsa_dom mp in let evaluated_value = denote_value_exp value vsa_dom mp in NewEnv (denote_store mp pred evaluated_addr evaluated_value endianess sz)
+    | _ -> Value (denote_value_exp first_exp vsa_dom mp)
+
+let denote_def  (d: Def.t) (pred: VsaDom.t) (mp: ValueStore.ALocMap.t): VsaDom.t = 
   let assignee  = Def.lhs d in
   let (imms, vs) = pred in 
   if is_bool assignee then  
@@ -232,5 +255,8 @@ let denote_def  (d: Def.t) (pred: VsaDom.t): VsaDom.t =
   else
   (*if we arent updating a boolean *)
   let denote_def' (pred : ValueStore.AbstractStore.t): ValueStore.AbstractStore.t = 
-    raise (Failure "unimplemented")
+    let res_of_expr = denote_expr (Def.rhs d) (imms,pred) mp in 
+    match res_of_expr with 
+      | Value nval -> ValueStore.ALoc.Map.set pred ~key:(ValueStore.ALoc.Var assignee) ~data:nval
+      | NewEnv updated_store -> updated_store
 in (Var.Map.map imms ~f:(fun (t,f) -> denote_def' t,  denote_def' f) , denote_def' vs)
