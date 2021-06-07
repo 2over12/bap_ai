@@ -40,14 +40,22 @@ module ALoc = struct
 end
 
 module ValueSet = struct
- include CompleteLattice.LatFromCPO(MapDomain.MakeMap(MemoryRegion)(ClpDomain))
+  module VsetCPO = MapDomain.MakeMap(MemoryRegion)(ClpDomain)
+  include CompleteLattice.LatFromCPO(VsetCPO)
   
+ let pairwise_function_inclusive ~f:(f:ClpDomain.t -> ClpDomain.t -> ClpDomain.t) (x: t) (y:t) =
+    match (x,y) with 
+      | (Top,_) -> Top 
+      | (_,Top) -> Top 
+      | (Below x, Below y) -> Below (VsetCPO.pairwise_function_inclusive ~f:f x y)
+
+
+ let apply_function ~f:(f: ClpDomain.t -> ClpDomain.t) = fmap ~default:Top ~f:(fun x -> 
+  Below (MemoryRegion.Map.map ~f:f x))
 
  let abstract_constant (w: word) = 
   (let v = CircularLinearProgression.abstract_single_value ~width:(Word.bitwidth w) (Word.to_int64 w |> Stdlib.Result.get_ok |> Z.of_int64) in
-  MemoryRegion.Map.of_alist_exn [(MemoryRegion.Global,v)])
-
-
+  Below (MemoryRegion.Map.of_alist_exn [(MemoryRegion.Global,v)]))
 
 end
 
@@ -94,5 +102,5 @@ module ALocMap = struct
           | `Aligned loc -> let aloc = ALoc.Mem (key,loc) in if Option.is_some loc.size && (Option.value_exn loc.size) = sz then Either.First aloc else Either.Second aloc
           | `Misaligned loc ->  let aloc = ALoc.Mem (key,loc) in Either.Second aloc
           )
-      ))
+      )) maybe_vs
 end

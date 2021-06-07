@@ -163,7 +163,7 @@ let denote_un_op (op: unop) (s: ValueStore.ValueSet.t): ValueStore.ValueSet.t = 
   | NEG -> CircularLinearProgression.neg
   | NOT -> CircularLinearProgression.not_clp
   in
-    ValueStore.MemoryRegion.Map.map ~f:f s
+    ValueStore.ValueSet.apply_function ~f:f s
 
 
 
@@ -173,7 +173,7 @@ let exec_cast_on (ctype: cast) (v: ValueStore.ValueSet.t) (target_width: int) = 
   | HIGH ->  CircularLinearProgression.shrink_high ~width:target_width (*narrow keeping high bit*)
   | LOW ->  CircularLinearProgression.shrink_low ~width:target_width (*narrow keeping low bits*)
 in
-  ValueStore.MemoryRegion.Map.map ~f:f v
+ValueStore.ValueSet.apply_function ~f:f v
 
 let contains_no_heap_objects (access_list: ValueStore.ALoc.t list) = 
   not (List.exists 
@@ -188,7 +188,7 @@ let contains_no_recursive_objects (access_list: ValueStore.ALoc.t list) (non_rec
   | Var _ -> true
   | Mem (Heap _, _) -> true
   | Mem (Stack t,_) -> Tid.Set.mem non_rec_procs t
-  | Mem (Global _,_) -> true 
+  | Mem (Global,_) -> true 
   ) access_list
 
 let can_strong_update (fully_accssed: ValueStore.ALoc.t list) (partially_accesed: ValueStore.ALoc.t list) ((_,non_rec_procs): ValueStore.ALocMap.t) = 
@@ -218,7 +218,7 @@ let rec denote_value_exp (first_exp: Exp.t) (vsa_dom: VsaDom.t) (mp: ValueStore.
    | Ite (b, th, el) -> let (tres,fres) = denote_exp_as_bool b vsa_dom in ValueStore.ValueSet.join (denote_value_exp th (immenv,tres) mp)  (denote_value_exp el (immenv,fres) mp)
    | Cast (cast_ty, width, e) -> let evaluated = denote_value_exp e vsa_dom mp in exec_cast_on cast_ty evaluated width
    | Unknown _ -> raise (Failure "something failed to lift")
-   | Extract (lower, upper,e) -> let res = denote_value_exp e vsa_dom mp in ValueStore.MemoryRegion.Map.map ~f:(CircularLinearProgression.extract lower upper) res
+   | Extract (lower, upper,e) -> let res = denote_value_exp e vsa_dom mp in ValueStore.ValueSet.apply_function ~f:(CircularLinearProgression.extract lower upper) res
    | Concat (e1,e2) -> let e1 = denote_value_exp e1 vsa_dom mp in let e2 = denote_value_exp e2 vsa_dom mp in ValueStore.ValueSet.pairwise_function_inclusive ~f:CircularLinearProgression.concat e1 e2
    | Load (_,addr, endianess, sz) -> let evaluted_addr = denote_value_exp addr vsa_dom mp in denote_load mp pred evaluted_addr endianess sz
 

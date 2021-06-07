@@ -1,9 +1,10 @@
 open Core_kernel
 
-module LatFromCPO(X: AbstractDomain.CPO): sig
-  include AbstractDomain.LAT
-  val fmap: t -> f:(X.t -> 'a)  -> default:'a -> 'a
-end = struct 
+
+
+
+
+module LatFromCPO(X: AbstractDomain.CPO) = struct 
 
 
 
