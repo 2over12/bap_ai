@@ -260,3 +260,15 @@ let denote_def  (d: Def.t) (pred: VsaDom.t) (mp: ValueStore.ALocMap.t): VsaDom.t
       | Value nval -> ValueStore.ALoc.Map.set pred ~key:(ValueStore.ALoc.Var assignee) ~data:nval
       | NewEnv updated_store -> updated_store
 in (Var.Map.map imms ~f:(fun (t,f) -> denote_def' t,  denote_def' f) , denote_def' vs)
+
+
+let denote_block (blk: Blk.t) (pred: VsaDom.t) (mp: ValueStore.ALocMap.t): VsaDom.t = 
+  let phi_nodes = Term.enum phi_t blk in 
+  assert (Seq.is_empty phi_nodes);
+
+  let defs = Term.enum def_t blk in 
+
+
+    Seq.fold ~init:pred ~f:(fun new_pred df ->
+      
+      denote_def df new_pred mp ) defs
