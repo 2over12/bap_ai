@@ -262,6 +262,10 @@ let denote_def  (d: Def.t) (pred: VsaDom.t) (mp: ValueStore.ALocMap.t): VsaDom.t
 in (Var.Map.map imms ~f:(fun (t,f) -> denote_def' t,  denote_def' f) , denote_def' vs)
 
 
+type jmp_results = {successors: tid list; take_jmp: VsaDom.t; dont_take: VsaDom.t}
+
+let denote_jmp (jmp : Jmp.t) (pred: VsaDom.t): jmp_results
+
 let denote_block (blk: Blk.t) (pred: VsaDom.t) (mp: ValueStore.ALocMap.t): VsaDom.t = 
   let phi_nodes = Term.enum phi_t blk in 
   assert (Seq.is_empty phi_nodes);
@@ -269,6 +273,8 @@ let denote_block (blk: Blk.t) (pred: VsaDom.t) (mp: ValueStore.ALocMap.t): VsaDo
   let defs = Term.enum def_t blk in 
 
 
-    Seq.fold ~init:pred ~f:(fun new_pred df ->
+  let before_jumps = Seq.fold ~init:pred ~f:(fun new_pred df ->
       
-      denote_def df new_pred mp ) defs
+      denote_def df new_pred mp ) defs in
+
+  let jmps = Term.enum jmp_t blk in 
