@@ -124,7 +124,6 @@ let print_clp c = sexp_of_t c |> Sexp.to_string
 
 let handle_over_carding (c: 'a t) =
   let step = Z.erem c.step (comp_size c) in
-  print_endline ("trying_to_set_card:"^(print_clp c));
    {width=c.width;step=step;card=if Z.equal step Z.zero && Z.gt c.card Z.zero  then Z.one else c.card ;base=c.base}
 
 let canonize (maybe_wrong_card_c: 'a t) =
@@ -151,7 +150,7 @@ let create ~width:(width:int) ~step:(step:Z.t) ~card:(card:Z.t) (base:Z.t) =
   assert (Z.geq card Z.zero);
   (*print_endline ("width: " ^ Int.to_string width ^ "step: " ^ Z.to_string step ^ " card: " ^ Z.to_string card ^ " base: " ^ Z.to_string base);*)
   let res = canonize {width=width;step=step; base=base;card=card} in
-  print_endline ("canonized:"^(print_clp res));assert (not (Z.equal res.step Z.zero && Z.gt res.card Z.one));res
+  assert (not (Z.equal res.step Z.zero && Z.gt res.card Z.one));res
 
 let num_steps_leq_n n from by = Z.fdiv (Z.sub n from) by
 
@@ -353,9 +352,7 @@ let u' (c1: canon t) (c2: canon t)= let b = Z.min c1.base c2.base in
 
 
  let union (x: canon t) (y: canon t) = 
-    print_endline ("x:"^(print_clp x));
-    print_endline ("y:"^(print_clp y));
-    if equal x y then (print_endline "going with x";x)
+    if equal x y then x
     
     else
     if is_bottom x then y else 
