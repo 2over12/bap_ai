@@ -114,10 +114,21 @@ let interpret_unsigned_value  ~width (pval: Z.t)  = let sz = comp_size_from_widt
   let compute_signed_index_value (c: 'a t) i = 
     let pval =  compute_index_value_without_mod c i in interpret_signed_value ~width:c.width pval
 
+
+let compute_last_val_unwrapped (c: 'a t) = (Z.add c.base (Z.mul (Z.pred c.card) c.step))
+
 let compute_last_val (c:'a t) = compute_index_value c (Z.pred c.card)
 let compute_signed_last_val (c: 'a t) = compute_signed_index_value c (Z.pred c.card)
 
-let canonize (c: 'a t) =
+let print_clp c = sexp_of_t c |> Sexp.to_string
+
+let handle_over_carding (c: 'a t) =
+  let step = Z.erem c.step (comp_size c) in
+  print_endline ("trying_to_set_card:"^(print_clp c));
+   {width=c.width;step=step;card=if Z.equal step Z.zero && Z.gt c.card Z.zero  then Z.one else c.card ;base=c.base}
+
+let canonize (maybe_wrong_card_c: 'a t) =
+  let c = handle_over_carding maybe_wrong_card_c in 
   let k = comp_k c in
   let gap = Z.gcd c.step (comp_size c) in
   match c.card with
@@ -139,7 +150,8 @@ let canonize (c: 'a t) =
 let create ~width:(width:int) ~step:(step:Z.t) ~card:(card:Z.t) (base:Z.t) =
   assert (Z.geq card Z.zero);
   (*print_endline ("width: " ^ Int.to_string width ^ "step: " ^ Z.to_string step ^ " card: " ^ Z.to_string card ^ " base: " ^ Z.to_string base);*)
-  canonize {width=width;step=step; base=base;card=card}
+  let res = canonize {width=width;step=step; base=base;card=card} in
+  print_endline ("canonized:"^(print_clp res));assert (not (Z.equal res.step Z.zero && Z.gt res.card Z.one));res
 
 let num_steps_leq_n n from by = Z.fdiv (Z.sub n from) by
 
@@ -333,14 +345,19 @@ let is_bottom (x: canon t) = equal (bottom ~width:x.width) x
 
 let top ~width = create ~width:width ~step:Z.one ~card:(Z.pow (Z.succ Z.one) width) Z.zero
 
-let u'_card b s c1 c2 = (Z.fdiv (Z.sub (Z.max (compute_last_val c1) (compute_last_val c2)) b) s) |> Z.succ
+let u'_card b s c1 c2 = (Z.fdiv (Z.sub (Z.max (compute_last_val_unwrapped c1) (compute_last_val_unwrapped c2)) b)  s) |> Z.succ
 
 let u' (c1: canon t) (c2: canon t)= let b = Z.min c1.base c2.base in 
   let s = Z.gcd c1.step c2.step |> Z.gcd (Z.sub c1.base c2.base|> Z.abs) in 
   let n = u'_card b s c1 c2 in create ~width:c1.width ~step:s ~card:n b
 
+
  let union (x: canon t) (y: canon t) = 
-    if equal x y then x else
+    print_endline ("x:"^(print_clp x));
+    print_endline ("y:"^(print_clp y));
+    if equal x y then (print_endline "going with x";x)
+    
+    else
     if is_bottom x then y else 
     if is_bottom y then x else
     if Z.equal x.card Z.one && Z.equal y.card Z.one then 

@@ -19,6 +19,11 @@ let test_canon_caseb _ =
   let c_canon = CircularLinearProgression.canonize c in
   assert_equal ~printer:clp_printer (CircularLinearProgression.create  ~width:8 ~step:(Z.of_int 16) ~card:(Z.of_int 15) (Z.of_int 184)) c_canon 
 
+
+let test_canon_0step _ = let c = ({width=3;step=(Z.of_int 224);card=(Z.of_int 2);base=(Z.of_int 2)}:(CircularLinearProgression.canon CircularLinearProgression.t)) in
+  let c_canon = CircularLinearProgression.canonize c in 
+   assert_equal  ~printer:clp_printer (CircularLinearProgression.create  ~width:3 ~step:(Z.of_int 0) ~card:(Z.of_int 1) (Z.of_int 2)) c_canon
+
 let test_canon_casec _ = 
   let s = CircularLinearProgression.create ~width:8 ~step:(Z.of_int 132) ~card:(Z.of_int 7) (Z.of_int 90) in 
   assert_equal ~printer:clp_printer (CircularLinearProgression.create  ~width:8 ~step:(Z.of_int 124) ~card:(Z.of_int 7) (Z.of_int 114)) (CircularLinearProgression.canonize s)
@@ -156,14 +161,20 @@ let test_canon_casec _ =
   
   let create_union_regression a b =  bin_op_regression a b CircularLinearProgression.union CircularLinearProgression.unsigned_concretize CircularLinearProgression.Z.Set.union
 
-  let union_regression = let a =  CircularLinearProgression.create ~width:6 ~step:(Z.of_int 16) ~card:(Z.of_int 2) (Z.of_int 10) in
+  
+  let union_regression: test_ctxt -> unit = let a =  CircularLinearProgression.create ~width:6 ~step:(Z.of_int 16) ~card:(Z.of_int 2) (Z.of_int 10) in
       let b = CircularLinearProgression.create ~width:6 ~step:Z.zero  ~card:Z.one Z.zero in
       create_union_regression a b
     
-  let union_regression2 = create_union_regression (CircularLinearProgression.create ~width:11 ~card:(Z.of_int 3) ~step:(Z.of_int 866) (Z.of_int 855)) (CircularLinearProgression.create ~width:11 ~card:(Z.of_int 1) ~step:(Z.of_int 0) (Z.of_int 41))
+  let union_regression2: test_ctxt -> unit = create_union_regression (CircularLinearProgression.create ~width:11 ~card:(Z.of_int 3) ~step:(Z.of_int 866) (Z.of_int 855)) (CircularLinearProgression.create ~width:11 ~card:(Z.of_int 1) ~step:(Z.of_int 0) (Z.of_int 41))
 
+
+  let union_regression3 = create_union_regression (CircularLinearProgression.create ~width:3 ~card:(Z.one) ~step:Z.zero (Z.of_int 5))  (CircularLinearProgression.create ~width:3 ~card:(Z.one |> Z.succ) ~step:Z.zero (Z.of_int 5))
+
+  let union_regression4 = create_union_regression (CircularLinearProgression.create ~width:3 ~card:(Z.one) ~step:Z.zero (Z.of_int 5))  (CircularLinearProgression.create ~width:3 ~card:(Z.of_int 256) ~step:Z.zero (Z.of_int 5))
   let suite =
   "Test CLPs" >::: [
+    
     "test_canon_casea" >:: test_canon_casea;
     "test_canon_caseb" >:: test_canon_caseb;
     "test_canon_casec" >:: test_canon_casec;
@@ -181,7 +192,10 @@ let test_canon_casec _ =
     test_union;
     "union_regression" >:: union_regression;
     "union_regression2" >:: union_regression2;
-    "test_neg_regression" >:: neg_regression
+    "test_neg_regression" >:: neg_regression; 
+    "test_div_by_zero_union_regression" >:: union_regression3;
+    "test_union_regression_second_div_by_zero" >:: union_regression4;
+    "test_canon_0stepwitherem" >:: test_canon_0step;
   ]
 
 let () =
