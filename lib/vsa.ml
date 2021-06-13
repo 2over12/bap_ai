@@ -466,6 +466,8 @@ end) = struct
 
 
   let mk_bv (s: 's Theory.Value.sort) (v: X.domain) = KB.Value.put X.target_slot (Theory.Value.empty s) v |> KB.return
+
+  let value x = KB.Value.get X.target_slot x
 end
 
 module SolvableBooleanExpressions: Theory.Core = struct 
@@ -536,7 +538,7 @@ type domain = ProduceValueSet.t
 let target_slot = compute_exp_slot
 end)
 
-  let value x = KB.Value.get compute_exp_slot x
+  
 
   let unop f x = lift mk_bv same_sort f x
   
@@ -554,7 +556,46 @@ end)
   let neg x = unop_app  ~f:CircularLinearProgression.neg x
  
 
+  let binop f x y = lift2 mk_bv same_sort2 f x y
+
+
+  let chain2 ~f:(f: ValueStore.ValueSet.t -> ValueStore.ValueSet.t -> ValueStore.ValueSet.t) (forig1: ProduceValueSet.t) (forig2: ProduceValueSet.t) = Monads.Std.Monad.Option.Syntax.(
+    !$$ (fun forig1 forig2 -> fun vstore -> f (forig1 vstore) (forig2 vstore)) forig1 forig2)
+
+  let binop_pairwise_inclusive x y ~f:(f:ClpDomain.t -> ClpDomain.t -> ClpDomain.t) = chain2 ~f:(ValueStore.ValueSet.pairwise_function_inclusive ~f:f) x y
  
+
+  let binop_app x y  ~f:(f:ClpDomain.t -> ClpDomain.t -> ClpDomain.t) = binop (binop_pairwise_inclusive ~f:f) x y
+
+  let add (x: 's Theory.bitv) (y: 's Theory.bitv) = binop_app ~f:CircularLinearProgression.add x y 
+
+  let sub (x: 's Theory.bitv) (y: 's Theory.bitv) = binop_app ~f:CircularLinearProgression.sub x y
+
+  let aloc_from_theory  (v: 'a Theory.var) = (ValueStore.ALoc.Var (Var.reify v))
+
+  let var (v: 'a Theory.var) = mk_bv (Theory.Var.sort v) (Some (fun vstore -> ValueStore.AbstractStore.get vstore (aloc_from_theory v)))
+
+
+  let unk (s: 'a Theory.Value.sort) = mk_bv s (Some (fun _ -> ValueStore.ValueSet.Top))
+
+
+  let let_ (v: 'a Theory.var) (exp_v: 'a Theory.pure) (body: 'b Theory.pure) = 
+    exp_v >>= (fun exp_v ->
+      body >>= (fun body ->   mk_bv (Theory.Value.sort body) (let v_func = (value exp_v) in 
+        let body_func = (value body) in 
+          Monads.Std.Monad.Option.Syntax.(
+            !$$ (fun v_func body_func -> fun vstore -> 
+              let res = v_func vstore in
+              let new_vstore = ValueStore.ALoc.Map.set vstore ~key:(aloc_from_theory v) ~data:res in 
+              body_func new_vstore
+              ) v_func body_func
+          )
+
+      ) 
+        
+        ))
+  
+
   let append (cst: 'a Theory.Bitv.t Theory.Value.sort) (bv1: 'b Theory.bitv) (bv2: 'c Theory.bitv) = bv1 >>= fun bv1 -> (bv2 >>= fun bv2 -> 
       let b1s = Theory.Value.sort bv1 in 
       let b2s = Theory.Value.sort bv2 in
