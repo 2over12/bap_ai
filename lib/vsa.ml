@@ -340,7 +340,9 @@ end) = struct
     KB.Order.EQ
   else if (X.le x y) then 
     KB.Order.LT
-  else 
+  else if (X.le y x) then
+    KB.Order.GT
+  else
     KB.Order.NC
 
   let dom = KB.Domain.define ~join:(fun x y -> Result.Ok (X.join x y)) ~empty:X.bot ~order:order Y.name
@@ -545,12 +547,11 @@ end)
   let apply_function f x = chain_with ~f:(ValueStore.ValueSet.apply_function ~f:f) x
 
     
-    let unop_app x ~f:(f:ClpDomain.t -> ClpDomain.t) = unop (apply_function f) x
+  let unop_app x ~f:(f:ClpDomain.t -> ClpDomain.t) = unop (apply_function f) x
 
   let not x = unop_app  ~f:CircularLinearProgression.not_clp x
 
   let neg x = unop_app  ~f:CircularLinearProgression.neg x
- 
  
 
  
