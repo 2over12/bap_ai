@@ -1,5 +1,9 @@
 open Core_kernel
 open Bap.Std
+open Bap_core_theory
+open Bap_knowledge
+
+open Knowledge.Syntax
 
 module VsaDom = ProductDomain.BottomReduction(ImmEnv.BooleanImmediates)(ValueStore.AbstractStore)
 
@@ -264,8 +268,9 @@ in (Var.Map.map imms ~f:(fun (t,f) -> denote_def' t,  denote_def' f) , denote_de
 
 type jmp_results = {successors: tid list; take_jmp: VsaDom.t; dont_take: VsaDom.t}
 
-let denote_jmp (jmp : Jmp.t) (pred: VsaDom.t): jmp_results
+let apply_guard (pred: VsaDom.t) (value) = raise (Failure "not implemented")
 
+let denote_jmp (jmp : Jmp.t) (pred: VsaDom.t): jmp_results = raise (Failure "not implemented")
 let denote_block (blk: Blk.t) (pred: VsaDom.t) (mp: ValueStore.ALocMap.t): VsaDom.t = 
   let phi_nodes = Term.enum phi_t blk in 
   assert (Seq.is_empty phi_nodes);
@@ -278,3 +283,161 @@ let denote_block (blk: Blk.t) (pred: VsaDom.t) (mp: ValueStore.ALocMap.t): VsaDo
       denote_def df new_pred mp ) defs in
 
   let jmps = Term.enum jmp_t blk in 
+    raise (Failure "not implemented") 
+
+
+
+(*TODO hmm didnt require GT*)
+
+
+module CPOToBAPDom(X: AbstractDomain.CPO)(Y: sig 
+  val name: string
+end) = struct 
+  let order x y = if (X.eq x y) then 
+    KB.Order.EQ
+  else if (X.le x y) then 
+    KB.Order.LT
+  else 
+    KB.Order.NC
+
+  let dom = KB.Domain.define ~join:(fun x y -> Result.Ok (X.join x y)) ~empty:X.bot ~order:order Y.name
+end
+
+
+type KB.conflict += | FlatDomain 
+
+module FlatDomain(T: T)(Y: sig 
+  val name: string
+end) = struct 
+  type t = T.t Option.t
+
+
+  let order x y = match (x,y) with 
+    None, None | Some _, Some _-> KB.Order.NC
+    | Some _ , None -> KB.Order.GT
+    | None, Some _ -> KB.Order.LT
+
+    let dom = KB.Domain.define ~join:(fun x y -> match (x,y) with
+    | None, None -> Result.Ok None
+    | Some _, Some _ -> Result.Error FlatDomain
+    | Some x, None -> Result.Ok (Some x)
+    | None, Some y -> Result.Ok (Some y)
+  ) ~empty:None ~order:order Y.name
+
+
+  
+end
+
+module ValueSetDom = CPOToBAPDom(ValueStore.ValueSet)(struct let name = "valueset" end)
+module AbstractStoreDom = CPOToBAPDom(ValueStore.AbstractStore)(struct let name = "abstractstore" end)
+
+module VsaKBDom = CPOToBAPDom(VsaDom)(struct let name = "vsadom" end)
+
+module ProduceVsaDom = FlatDomain(struct 
+type t = VsaDom.t -> VsaDom.t
+end)(struct let name = "compute_abstractstore" end)
+
+
+module ProduceVsaDom = FlatDomain(struct 
+type t = VsaDom.t -> BoolDom.t
+end)(struct let name = "compute_bool_dom" end)
+
+
+module ProduceValueSet = FlatDomain(struct 
+  type t = ValueStore.AbstractStore.t -> ValueStore.ValueSet.t
+end)(struct let name = "compute_valueset" end)
+
+
+
+module ProduceBoolean = FlatDomain(struct 
+  type t = VsaDom.t -> BoolDom.t
+end)(struct let name = "compute_valueset" end)
+
+let preds_set = KB.Domain.powerset (module Tid) "prececessors"
+
+
+let post_conds = KB.Domain.mapping
+
+let valueset_map ~f:(f:ValueStore.ValueSet.t -> ValueStore.ValueSet.t) (x: ProduceValueSet.t) = Option.map ~f:(fun producer -> fun ctxt -> f (producer ctxt)) x
+
+
+let compute_exp_slot = KB.Class.property ~package:"bap_ai" Theory.Value.cls  ~public:true "exp_value" ProduceValueSet.dom
+
+let compute_bool_slot = KB.Class.property ~package:"bap_ai" Theory.Value.cls ~public:true "exp_bool_value" ProduceBoolean.dom
+
+let compute_post_condidtion = KB.Class.property ~package:"bap_ai" Theory.Effect.cls ~public:true "stmt_value" ProduceVsaDom.dom
+
+let prec_slot = KB.Class.property ~package:"bap_ai" Theory.Program.cls ~public:true "precondition" VsaKBDom.dom
+
+
+module Bitv = struct 
+
+end 
+
+
+module GrabValues : Theory.Core = struct 
+  include Theory.Empty
+
+(*
+  let blk (lbl: Tid.t) (statements: Theory.data Theory.eff) (jmps: Theory.ctrl Theory.eff) = KB.collect prec_slot lbl >>= fun precond ->
+  *)  
+     
+     (*statements >>= fun stats -> ((KB.Value.get compute_post_condidtion stats):ProduceAbstractStore.t)*)
+end
+
+
+
+
+module SolvableBooleanExpressions: Theory.Core = struct end
+
+module Denotation: Theory.Core = struct
+  include Theory.Empty
+  
+
+  let value x = KB.Value.get compute_exp_slot x
+
+  let (>-->) (x: 's Theory.bitv) (f: ValueStore.ValueSet.t -> ValueStore.ValueSet.t) =  x >>| (fun v -> 
+    let maybe_vs_computer = KB.Value.get compute_exp_slot v in
+    let new_vs = Option.map ~f:(fun vs_computer -> 
+      fun state -> f (vs_computer state)
+      ) maybe_vs_computer in
+    let nval =  KB.Value.put compute_exp_slot v new_vs in
+    nval)
+
+  let lift f: ('s Theory.bitv -> 's Theory.bitv) = fun x -> (x >--> f)
+
+  let unop f: ('s Theory.bitv -> 's Theory.bitv)   = fun x -> lift f x
+
+  let unop_app ~f = unop (ValueStore.ValueSet.apply_function ~f:f)
+  let not x = unop_app  ~f:CircularLinearProgression.not_clp x
+
+  let neg x = unop_app  ~f:CircularLinearProgression.neg x
+
+
+ 
+  let append (cst: 'a Theory.Bitv.t Theory.Value.sort) (bv1: 'b Theory.bitv) (bv2: 'c Theory.bitv) = bv1 >>= fun bv1 -> (bv2 >>= fun bv2 -> 
+      let b1s = Theory.Value.sort bv1 in 
+      let b2s = Theory.Value.sort bv2 in
+      let bv1_size  =  Theory.Bitv.size b1s in
+      let bv2_size = Theory.Bitv.size b2s in 
+      let app_size = bv1_size + bv2_size in 
+      let goal = Theory.Bitv.size cst in 
+    
+      let appended: (ProduceValueSet.t) = 
+        Option.map2 ~f:(fun bv1_f bv2_f -> fun ctxt -> ValueStore.ValueSet.pairwise_function_inclusive ~f:(CircularLinearProgression.concat) (bv1_f ctxt) (bv2_f ctxt) ) (value bv1) (value bv2)
+         in 
+      let casted = 
+        if app_size = goal then 
+          appended 
+      else if app_size < goal  
+        then
+          valueset_map ~f:(fun vset -> exec_cast_on UNSIGNED vset goal) appended
+        else
+          valueset_map ~f:(fun vset -> exec_cast_on LOW vset goal) appended
+      in
+       KB.return (KB.Value.put compute_exp_slot (Theory.Value.empty cst) casted)
+    )
+
+
+  
+end 
