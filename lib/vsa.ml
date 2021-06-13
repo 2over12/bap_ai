@@ -120,6 +120,49 @@ let handle_predicate (comp: binop) (lh: exp) (rh: exp) (vs: ValueStore.AbstractS
     (limit_var rv vs flipped li, limit_var rv vs (neg_of_comp flipped) li)
   | _ -> (vs,vs)
 
+
+module KnownForm = struct
+  type connective_op =  
+    | AND 
+    | OR [@@deriving sexp,compare]
+
+  type predicate_op =
+    | EQ
+    | NEQ
+    | SLT
+    | ULT
+    | SGT
+    | UGT
+    | SGE
+    | UGE
+     [@@deriving sexp,compare]
+    
+
+  
+
+  type atom = 
+    | Var of var
+    | Int of word [@@deriving sexp,compare]
+  
+  
+
+  type known_exp = 
+    | Atom of atom
+    | Connective of connective_op * known_exp * known_exp
+    | Predicate of predicate_op * atom * atom [@@deriving sexp,compare]
+  module T = struct 
+    type t = known_exp option [@@deriving sexp,compare]
+  end
+
+  include Comparable.Make(T)
+  include T
+
+
+  let create_int (w: Theory.word) (width: int) = Some (Atom (Int (Word.create w width)))
+
+  let create_var (v: 'a Theory.var) = Some (Atom (Var (Var.reify v)))
+end
+
 let rec denote_exp_as_bool (e: Exp.t) (pred: VsaDom.t): BoolDom.t =
   let (imms,vs) = pred in 
   match e with 
@@ -338,7 +381,7 @@ type t = VsaDom.t -> VsaDom.t
 end)(struct let name = "compute_abstractstore" end)
 
 
-module ProduceVsaDom = FlatDomain(struct 
+module ProduceBoolDom = FlatDomain(struct 
 type t = VsaDom.t -> BoolDom.t
 end)(struct let name = "compute_bool_dom" end)
 
@@ -370,6 +413,9 @@ let compute_post_condidtion = KB.Class.property ~package:"bap_ai" Theory.Effect.
 let prec_slot = KB.Class.property ~package:"bap_ai" Theory.Program.cls ~public:true "precondition" VsaKBDom.dom
 
 
+let known_form_slot = KB.Class.property ~package:"bap_ai" Theory.Value.cls ~public:false "is_known_form" (KB.Domain.flat ~equal:KnownForm.equal ~empty:None "known_form_exp")
+
+
 module Bitv = struct 
 
 end 
@@ -377,6 +423,7 @@ end
 
 module GrabValues : Theory.Core = struct 
   include Theory.Empty
+
 
 (*
   let blk (lbl: Tid.t) (statements: Theory.data Theory.eff) (jmps: Theory.ctrl Theory.eff) = KB.collect prec_slot lbl >>= fun precond ->
@@ -388,31 +435,123 @@ end
 
 
 
-module SolvableBooleanExpressions: Theory.Core = struct end
+(*Ok so the goal here is to flatten out the solvable boolean variables into a slot that we can leverage
+This will allow certain boolean expression to be calculated in a solvable way
+*)
+
+
+module GenericTheoryOps(X: sig 
+type domain
+val target_slot: (Theory.Value.cls,domain) KB.slot
+
+end) = struct 
+  let (>>->) v f = v >>= fun v -> f (Theory.Value.sort v) (KB.Value.get X.target_slot v)
+
+  let lift2 mk s f x y =
+    x >>-> fun sx x ->
+    y >>-> fun sy y ->
+    mk (s sx sy) (f x y)
+
+  let lift mk s f x = 
+      x >>-> fun sx x -> mk (s sx) (f x)
+
+  let same_sort2 s1 s2 = s1 
+  
+  let same_sort s1 = s1
+  let bool_sort x = Theory.Bool.t
+
+  let bool_sort2 x y = Theory.Bool.t
+
+
+  let mk_bv (s: 's Theory.Value.sort) (v: X.domain) = KB.Value.put X.target_slot (Theory.Value.empty s) v |> KB.return
+end
+
+module SolvableBooleanExpressions: Theory.Core = struct 
+include Theory.Empty
+
+include GenericTheoryOps(struct
+type domain = KnownForm.T.t
+let target_slot = known_form_slot
+end)
+
+
+
+let create_atom (kf: KnownForm.t) sort = KB.Value.put known_form_slot (Theory.Value.empty sort) kf |> KB.return
+
+
+(* Atomics *)
+let int (sort: 's Theory.Bitv.t Theory.Value.sort) (v: Theory.word) =  create_atom (KnownForm.create_int v (Theory.Bitv.size sort)) sort
+
+let var (v: 'a Theory.var) = create_atom (KnownForm.create_var v) (Theory.Var.sort v)
+
+(* Connectives *)
+let create_connective (conn: KnownForm.connective_op) (b1: KnownForm.t) (b2: KnownForm.t) = Monads.Std.Monad.Option.Syntax.(
+  !$$ (fun b1 b2  -> 
+    KnownForm.Connective (conn, b1, b2)) b1 b2 
+)
+
+let handle_bool (conn:  KnownForm.connective_op) (x: Theory.bool) (y: Theory.bool) = (lift2 mk_bv same_sort2  (create_connective conn) x y)
+
+let and_ (x: Theory.bool) (y: Theory.bool) = handle_bool AND x y
+
+let or_ x y = handle_bool OR x y
+
+
+let create_predicate (pred_op: KnownForm.predicate_op) (b1: KnownForm.t) (b2: KnownForm.t) = Monads.Std.Monad.Option.Syntax.(
+   b1 >>= (fun b1 -> b2 >>= fun b2 -> match (b1,b2) with
+    | (Atom x, Atom y) -> Some (KnownForm.Predicate (pred_op,x,y))
+    | _ -> None
+   )
+)
+
+let handle_predicate pred_op x y = (lift2 mk_bv bool_sort2 (create_predicate pred_op) x y)
+(*Predicates*)
+let neq (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate NEQ x y
+
+let eq (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate EQ x y
+
+let slt (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate SLT x y
+
+let ult (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate ULT x y
+
+
+let sgt (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate SGT x y
+
+let ugt  (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate UGT x y
+
+
+
+let sge  (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate SGE x y
+
+let uge  (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate UGE x y
+
+end
 
 module Denotation: Theory.Core = struct
   include Theory.Empty
-  
+  include GenericTheoryOps(struct
+type domain = ProduceValueSet.t
+let target_slot = compute_exp_slot
+end)
 
   let value x = KB.Value.get compute_exp_slot x
 
-  let (>-->) (x: 's Theory.bitv) (f: ValueStore.ValueSet.t -> ValueStore.ValueSet.t) =  x >>| (fun v -> 
-    let maybe_vs_computer = KB.Value.get compute_exp_slot v in
-    let new_vs = Option.map ~f:(fun vs_computer -> 
-      fun state -> f (vs_computer state)
-      ) maybe_vs_computer in
-    let nval =  KB.Value.put compute_exp_slot v new_vs in
-    nval)
+  let unop f x = lift mk_bv same_sort f x
+  
+  let chain_with ~f:(f:ValueStore.ValueSet.t-> ValueStore.ValueSet.t) (f_orig: ProduceValueSet.t)  = Monads.Std.Monad.Option.Syntax.(
+     !$(fun prev -> fun vstore -> f (prev vstore)) f_orig
+  )
 
-  let lift f: ('s Theory.bitv -> 's Theory.bitv) = fun x -> (x >--> f)
+  let apply_function f x = chain_with ~f:(ValueStore.ValueSet.apply_function ~f:f) x
 
-  let unop f: ('s Theory.bitv -> 's Theory.bitv)   = fun x -> lift f x
+    
+    let unop_app x ~f:(f:ClpDomain.t -> ClpDomain.t) = unop (apply_function f) x
 
-  let unop_app ~f = unop (ValueStore.ValueSet.apply_function ~f:f)
   let not x = unop_app  ~f:CircularLinearProgression.not_clp x
 
   let neg x = unop_app  ~f:CircularLinearProgression.neg x
-
+ 
+ 
 
  
   let append (cst: 'a Theory.Bitv.t Theory.Value.sort) (bv1: 'b Theory.bitv) (bv2: 'c Theory.bitv) = bv1 >>= fun bv1 -> (bv2 >>= fun bv2 -> 
