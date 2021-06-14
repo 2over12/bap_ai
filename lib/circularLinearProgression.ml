@@ -896,3 +896,8 @@ else
     let nc2 = zero_extend ~width:nwidth c2 in 
       left_shift nc1 (abstract_single_value (Z.of_int c2.width) ~width:nwidth) |> logor nc2
 
+  let is_true (c1: canon t) = 
+    Z.gt (min_u c1) Z.zero
+
+  let is_false (c1: canon t) = 
+    (Z.equal c1.card Z.one) && (Z.equal c1.base Z.zero)

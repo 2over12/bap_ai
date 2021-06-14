@@ -588,12 +588,36 @@ end)
               let res = v_func vstore in
               let new_vstore = ValueStore.ALoc.Map.set vstore ~key:(aloc_from_theory v) ~data:res in 
               body_func new_vstore
-              ) v_func body_func
-          )
+              ) v_func body_func))))
 
-      ) 
+
+  let ite (b: Theory.bool) (th: 'a Theory.pure) (el: 'a Theory.pure) = b >>= (fun b ->
+    th >>= (fun th -> 
+      el >>= (fun el ->
+        let b = (value b) in
+        let new_th = (value th) in 
+
+        let el = (value el) in 
+        mk_bv (Theory.Value.sort th)
+        Monads.Std.Monad.Option.Syntax.(
+
+          !$$$ (fun b th el -> fun vstore -> 
+            let bres = b vstore |> ValueStore.ValueSet.get_constants in 
+            if (CircularLinearProgression.is_true bres) then
+              th vstore
+
+            else if (CircularLinearProgression.is_false bres) then
+              el vstore
+            else
+              ValueStore.ValueSet.join (th vstore) (el vstore)
+            ) b new_th el
+
+        )
         
-        ))
+        )
+      
+      )
+    )
   
 
   let append (cst: 'a Theory.Bitv.t Theory.Value.sort) (bv1: 'b Theory.bitv) (bv2: 'c Theory.bitv) = bv1 >>= fun bv1 -> (bv2 >>= fun bv2 -> 
