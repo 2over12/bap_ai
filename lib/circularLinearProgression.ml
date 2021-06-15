@@ -580,14 +580,19 @@ let unary_operator (f: canon t -> canon t)  (c1: canon t) = if is_bottom c1 then
 let not_clp = let not' c1 = create ~width:c1.width ~step:c1.step ~card:c1.card (Z.lognot (compute_last_val c1)) in unary_operator not'
 
 let get_set_msb (a: Z.t)  =
-    let res = Z.numbits a |> (-) 1 in
+    let res = Z.numbits a - 1 in
       if Int.(<) res 0 then None else Some res
 
 let compute_capL_capU (c: alp t) = 
-  let cap_L = Z.trailing_zeros c.step in 
-  let differ = Z.logxor (compute_last_val c) c.base in 
-  let cap_U = get_set_msb differ |> Option.value_exn in (* should not be 0*)
-  (Z.of_int cap_L, Z.of_int cap_U)
+  if Z.equal c.card Z.one then 
+    (Z.of_int c.width,Z.of_int (-1))
+  else
+    (assert (Z.gt c.step Z.zero);
+    print_endline ("last_val:" ^ (compute_last_val c |> Z.to_string)^ "alp: "^(sexp_of_t c |> Sexp.to_string));
+    let cap_L = Z.trailing_zeros c.step in 
+    let differ = Z.logxor (compute_last_val c) c.base in 
+    let cap_U = get_set_msb differ |> Option.value_exn in (* should not be 0*)
+    (Z.of_int cap_L, Z.of_int cap_U))
 
 
 let generate_n_bits (n: int) = 
@@ -597,7 +602,6 @@ let rec generate_n_bits'
   generate_n_bits' n Z.zero
 
 let limit_to_bit_range (a: Z.t) (lowerbound :Z.t) (upperbound :Z.t) =
-  assert (Z.leq lowerbound upperbound);
   print_endline ("v: " ^ (Z.to_string a) ^ "lower: " ^ (Z.to_string lowerbound) ^ "upper: " ^ (Z.to_string upperbound));
   let selected_lower = Z.shift_right_trunc a (Z.to_int lowerbound) in
   (*number of high bits that need to be cleared*)
@@ -731,14 +735,21 @@ let bin_op_clp_alp_unsigned_same_width (f: canon t -> alp t -> canon t) (c1: can
 List.map ~f:(fun a -> f c1 a) alps |> List.fold ~f:union ~init:(bottom ~width:c1.width)
 
 let left_shift =
+
   let left_shift_alp (c1: canon t) (c2: alp t) = 
-  let b = Z.shift_left c1.base  (Z.to_int c2.base) (*todo this may not work if c2base is too big*) in
+    let sz = comp_size c1 in 
+    let shift_left_on_circle trgt by = Z.erem (Z.shift_left trgt by) sz in
+  print_endline ("in left shift " ^ (sexp_of_t c1 |> Sexp.to_string)  ^ (sexp_of_t c2 |> Sexp.to_string));
+  let b = shift_left_on_circle c1.base  (Z.to_int c2.base) (*todo this may not work if c2base is too big*) in
   let s = if Z.equal c2.card Z.one then 
-    Z.shift_left c1.step (Z.to_int c2.base)
+    shift_left_on_circle c1.step (Z.to_int c2.base)
   else 
-    Z.shift_left (Z.gcd c1.base c1.step) (Z.to_int c2.base) in
-  let n = Z.fdiv (Z.sub (Z.shift_left (compute_last_val c1) (Z.to_int (compute_last_val c2))) b) s |> Z.succ in (*todo this also could fail*) (* maybe we want to make sure these shifts are on mod 2^w*)
-  create ~width:c1.width ~step:s ~card:n b in
+    shift_left_on_circle (Z.gcd c1.base c1.step) (Z.to_int c2.base) in
+    print_endline ("b" ^ (Z.to_string b));
+  let n = if Z.equal Z.zero s then Z.one else (Z.fdiv (Z.sub (shift_left_on_circle (compute_last_val c1) (Z.to_int (compute_last_val c2))) b) s |> Z.succ) 
+    in (*todo this also could fail*) (* maybe we want to make sure these shifts are on mod 2^w*)
+    assert (Z.geq n Z.zero);
+    create ~width:c1.width ~step:s ~card:n b in
     bin_op_clp_alp_unsigned_same_width left_shift_alp
 
 let all_in_range_are_1 (lower: Z.t) (upper: Z.t) (value: Z.t) = 
@@ -957,10 +968,26 @@ else
   abstract_single_value Z.zero ~width:1
 
 
+
+let shift_right_fill1 (c: canon t) (by: canon t) = 
+  let one = (abstract_single_value ~width:c.width Z.one) in 
+  let by_1_bits = sub (right_shift_unsigned one  by) one in
+  let shift_top_bit_by = sub (abstract_single_value ~width:c.width (Z.of_int c.width)) by_1_bits in 
+  let or_mask = left_shift by_1_bits shift_top_bit_by in
+  logor or_mask (right_shift_unsigned c by)
+
 let shift_right_fill (fill: canon t) (c: canon t) (by: canon t) = 
     assert (Int.(=) fill.width 1);
     print_endline "going";
-    right_shift_unsigned c by
+    
+    let fill1 = shift_right_fill1 c by in
+    let fill0 = right_shift_unsigned c by in
+    if is_true fill then
+      fill1
+    else if is_false  fill then
+      fill0
+    else
+      union fill1 fill0   
 
 let shift_left_fill (fill: canon t) (c: canon t) (by: canon t) = 
   assert (Int.(=) fill.width 1);

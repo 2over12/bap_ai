@@ -217,6 +217,25 @@ let test_canon_casec _ =
     assert_equal ~printer:(clp_printer) (CircularLinearProgression.create ~width:5 ~step:Z.one ~card:(Z.of_int 16) Z.zero) res 
 
 
+let z_illogical_shift ~width:(width:int) (to_shift: Z.t) (by: int) = 
+    let it = (Z.shift_right_trunc to_shift by) in
+    let or_mask = Z.shift_right_trunc (Z.pred (Z.shift_right_trunc Z.one by) ) (max (width-by) 0) in 
+    Z.logor or_mask it
+
+
+
+  let regression_test_shiftr_fill03 _ = 
+    let to_shift =  CircularLinearProgression.create ~width:3 ~step:(Z.of_int 0) ~card:(Z.of_int 0) (Z.of_int 0) in
+    let by = CircularLinearProgression.create ~width:3 ~step:(Z.of_int 1) ~card:(Z.of_int 2) Z.zero in
+    let res = CircularLinearProgression.shift_right_fill1 to_shift by in 
+    assert_equal ~printer:(clp_printer) (CircularLinearProgression.create ~width:3 ~step:Z.zero ~card:(Z.of_int 0) Z.zero) res 
+
+  
+    let test_compute_capL_capU _ = 
+      let ta = create_alp ~width:3 ~card:(Z.of_int 3) ~step:(Z.one) (Z.of_int 5) in
+      let r = CircularLinearProgression.compute_capL_capU ta in
+      assert_equal (Z.zero,Z.one) r
+
   let suite = 
   "Test CLPs" >::: [
     
@@ -243,9 +262,11 @@ let test_canon_casec _ =
     "test_canon_0stepwitherem" >:: test_canon_0step;
     "unsigned_alp_regression" >:: unsigned_alp_regression;
     "shiftr_fill0_regression" >:: shiftr_fill0_regression;
-    test_shiftr_fill0; 
+    test_shiftr_fill0;
     "unsigned_alp_regression2" >:: unsigned_alp_regression2;
     "shiftr_fill0_regression2" >:: shiftr_fill0_regression2;
+    "regression_test_shiftr_fill03" >:: regression_test_shiftr_fill03;
+    "test_compute_capL_capU" >:: test_compute_capL_capU;
   ]
 
 let () =
