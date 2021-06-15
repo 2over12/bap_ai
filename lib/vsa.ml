@@ -540,23 +540,27 @@ end)
 
   
 
-  let unop f x = lift mk_bv same_sort f x
-  
+  let unop s f x = lift mk_bv s f x
+
   let chain_with ~f:(f:ValueStore.ValueSet.t-> ValueStore.ValueSet.t) (f_orig: ProduceValueSet.t)  = Monads.Std.Monad.Option.Syntax.(
      !$(fun prev -> fun vstore -> f (prev vstore)) f_orig
   )
 
   let apply_function f x = chain_with ~f:(ValueStore.ValueSet.apply_function ~f:f) x
-
+  
     
-  let unop_app x ~f:(f:ClpDomain.t -> ClpDomain.t) = unop (apply_function f) x
+  let unop_app s x ~f:(f:ClpDomain.t -> ClpDomain.t) = unop s (apply_function f) x
 
-  let not x = unop_app  ~f:CircularLinearProgression.not_clp x
+  let unop_same x ~f:(f:ClpDomain.t -> ClpDomain.t) = unop_app same_sort x ~f:f
 
-  let neg x = unop_app  ~f:CircularLinearProgression.neg x
+  let unop_bool x ~f:(f:ClpDomain.t -> ClpDomain.t) = unop_app bool_sort x ~f:f
+
+  let not x = unop_same  ~f:CircularLinearProgression.not_clp x
+
+  let neg x = unop_same  ~f:CircularLinearProgression.neg x
  
 
-  let binop f x y = lift2 mk_bv same_sort2 f x y
+  let binop s f x y = lift2 mk_bv s f x y
 
 
   let chain2 ~f:(f: ValueStore.ValueSet.t -> ValueStore.ValueSet.t -> ValueStore.ValueSet.t) (forig1: ProduceValueSet.t) (forig2: ProduceValueSet.t) = Monads.Std.Monad.Option.Syntax.(
@@ -565,11 +569,9 @@ end)
   let binop_pairwise_inclusive x y ~f:(f:ClpDomain.t -> ClpDomain.t -> ClpDomain.t) = chain2 ~f:(ValueStore.ValueSet.pairwise_function_inclusive ~f:f) x y
  
 
-  let binop_app x y  ~f:(f:ClpDomain.t -> ClpDomain.t -> ClpDomain.t) = binop (binop_pairwise_inclusive ~f:f) x y
+  let binop_app s x y ~f:(f:ClpDomain.t -> ClpDomain.t -> ClpDomain.t) = binop s (binop_pairwise_inclusive ~f:f) x y
 
-  let add (x: 's Theory.bitv) (y: 's Theory.bitv) = binop_app ~f:CircularLinearProgression.add x y 
-
-  let sub (x: 's Theory.bitv) (y: 's Theory.bitv) = binop_app ~f:CircularLinearProgression.sub x y
+  let binop_same x y ~f:(f:ClpDomain.t -> ClpDomain.t -> ClpDomain.t) = binop_app same_sort2 ~f:f x y
 
   let aloc_from_theory  (v: 'a Theory.var) = (ValueStore.ALoc.Var (Var.reify v))
 
@@ -618,6 +620,51 @@ end)
       
       )
     )
+  
+  let denote_constant (w: word) = (Some (fun _ -> ValueStore.ValueSet.abstract_constant w))
+  let b0 = mk_bv Theory.Bool.t (denote_constant Word.b0)
+
+  let b1 = mk_bv Theory.Bool.t (denote_constant Word.b1)
+
+  (* this probably isnt right but im lazy *)
+  let inv (b: Theory.bool) =  unop_same  ~f:CircularLinearProgression.not_clp b
+
+
+  let and_ (x: Theory.bool) (y: Theory.bool) = binop_same ~f:(CircularLinearProgression.logand) x y
+
+  let or_ x y = binop_same ~f:(CircularLinearProgression.logor) x y
+
+  let int (s: 's Theory.Bitv.t Theory.Value.sort) (w: Theory.word) = mk_bv s (denote_constant (Word.create w (Theory.Bitv.size s)))
+
+  
+  let msb (v: 's Theory.bitv) = unop_bool ~f:(CircularLinearProgression.msb) v
+
+  let lsb (v: 's Theory.bitv) = unop_bool ~f:(CircularLinearProgression.lsb) v
+  
+  let add (x: 's Theory.bitv) (y: 's Theory.bitv) = binop_same ~f:CircularLinearProgression.add x y 
+
+  let sub (x: 's Theory.bitv) (y: 's Theory.bitv) = binop_same ~f:CircularLinearProgression.sub x y
+
+
+  let mul (x: 's Theory.bitv) (y: 's Theory.bitv) = binop_same ~f:CircularLinearProgression.unsigned_mul x y
+  
+  let div (x: 's Theory.bitv) (y: 's Theory.bitv) = binop_same ~f:CircularLinearProgression.unsigned_div x y
+  
+
+  let sdiv (x: 's Theory.bitv) (y: 's Theory.bitv) = binop_same ~f:CircularLinearProgression.signed_div x y
+  
+  let modulo (x: 's Theory.bitv) (y: 's Theory.bitv) = binop_same ~f:CircularLinearProgression.unsigned_modulo x y
+
+  let smodulo (x: 's Theory.bitv) (y: 's Theory.bitv) = binop_same ~f:CircularLinearProgression.signed_modulo x y
+
+  let logand  (x: 's Theory.bitv) (y: 's Theory.bitv) = binop_same ~f:CircularLinearProgression.logand x y
+  
+  let logor  (x: 's Theory.bitv) (y: 's Theory.bitv) = binop_same ~f:CircularLinearProgression.logor x y
+  
+  let logxor  (x: 's Theory.bitv) (y: 's Theory.bitv) = binop_same ~f:CircularLinearProgression.logxor x y
+  
+  (*
+  let shiftr  (s: Theory.bool) (x: 's Theory.bitv) (y: 'b Theory.bitv) = binop_same ~f:CircularLinearProgression.shiftr x y*)
   
 
   let append (cst: 'a Theory.Bitv.t Theory.Value.sort) (bv1: 'b Theory.bitv) (bv2: 'c Theory.bitv) = bv1 >>= fun bv1 -> (bv2 >>= fun bv2 -> 

@@ -141,16 +141,35 @@ let test_canon_casec _ =
   let test_union =QCheck_ounit.to_ounit2_test (test_binary_operator CircularLinearProgression.union CircularLinearProgression.unsigned_concretize 
     (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 _c1 _c2 -> CircularLinearProgression.Z.Set.union v1 v2)) ~count:200)
   
+
+
+  
+
+  
+  let collect_pairwise ~f x y = List.cartesian_product (CircularLinearProgression.Z.Set.to_list x) (CircularLinearProgression.Z.Set.to_list y) |> List.map ~f:(fun (x,y) -> f x y) |> CircularLinearProgression.Z.Set.of_list
+
+  let shiftr_fill0_func: CircularLinearProgression.canon CircularLinearProgression.t -> CircularLinearProgression.canon CircularLinearProgression.t -> CircularLinearProgression.canon CircularLinearProgression.t = ((CircularLinearProgression.shift_right_fill (CircularLinearProgression.abstract_single_value Z.zero ~width:1)))
+  let  test_shiftr_fill0 = QCheck_ounit.to_ounit2_test (test_binary_operator  shiftr_fill0_func CircularLinearProgression.unsigned_concretize 
+  (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 _c1 _c2 -> 
+    collect_pairwise ~f:(fun x y -> Z.shift_right_trunc x (Z.to_int y)) v1 v2)) ~count:200)
+
+
+  let shiftr_fill0_regression _ =
+    let to_shift =  CircularLinearProgression.create ~width:3 ~step:Z.zero ~card:(Z.of_int 1) Z.one in
+    let by = CircularLinearProgression.create ~width:3 ~step:Z.one ~card:(Z.of_int 8) Z.zero in
+    let res = CircularLinearProgression.right_shift_unsigned to_shift by in 
+    assert_equal ~printer:(clp_printer) (CircularLinearProgression.create ~width:3 ~step:Z.one ~card:(Z.succ Z.one) Z.zero) res 
+
   let neg_regression _  = let initial_clp = CircularLinearProgression.create ~width:9 ~step:Z.one ~card:(Z.of_int 257) Z.zero in
   let res_clp = CircularLinearProgression.neg initial_clp in 
    let resulting_values = res_clp |> CircularLinearProgression.signed_concretize |> CircularLinearProgression.Z.Set.to_list |> List.sort ~compare:CircularLinearProgression.Z.compare in 
    let expected_values = CircularLinearProgression.Z.Set.map ~f:(Fn.compose (CircularLinearProgression.interpret_signed_value ~width:initial_clp.width)  Z.neg) (CircularLinearProgression.signed_concretize initial_clp) |> CircularLinearProgression.Z.Set.to_list |> List.sort ~compare:CircularLinearProgression.Z.compare in 
     assert_equal ~printer:(fun s -> Sexp.List (List.map ~f:(fun a -> Sexp.Atom (Z.to_string a)) s )|>  Sexp.to_string) expected_values resulting_values
 
-
-
   let print_set s = CircularLinearProgression.Z.Set.sexp_of_t s |> Sexp.to_string
 
+
+  
   let bin_op_regression (a: CircularLinearProgression.canon CircularLinearProgression.t) (b: CircularLinearProgression.canon CircularLinearProgression.t) abs_op concretization_function concrete_combine _ = 
     print_endline (print_clp a);
     print_endline (print_clp b);
@@ -172,7 +191,33 @@ let test_canon_casec _ =
   let union_regression3 = create_union_regression (CircularLinearProgression.create ~width:3 ~card:(Z.one) ~step:Z.zero (Z.of_int 5))  (CircularLinearProgression.create ~width:3 ~card:(Z.one |> Z.succ) ~step:Z.zero (Z.of_int 5))
 
   let union_regression4 = create_union_regression (CircularLinearProgression.create ~width:3 ~card:(Z.one) ~step:Z.zero (Z.of_int 5))  (CircularLinearProgression.create ~width:3 ~card:(Z.of_int 256) ~step:Z.zero (Z.of_int 5))
-  let suite =
+
+  
+  let create_shift_right_regression  a b =  bin_op_regression a b shiftr_fill0_func CircularLinearProgression.unsigned_concretize CircularLinearProgression.Z.Set.union
+
+  (*(((base 1)(step 0)(card 1)(width 1)), ((base 0)(step 0)(card 0)(width 1)))*)
+  let unsigned_alp_regression _ = let start_clp =  CircularLinearProgression.create ~width:1 ~card:(Z.of_int 1) ~step:(Z.of_int 0) (Z.of_int 1) in
+  let alps = CircularLinearProgression.unsigned_alps start_clp in assert_equal ~printer:(fun x -> List.map ~f:clp_printer x |> List.fold ~init:"" ~f:(fun accum x -> accum ^ "|"^x)) [
+    create_alp ~width:1 ~card:(Z.of_int 1) ~step:(Z.of_int 0) (Z.of_int 1)
+  ] alps  
+
+
+  let unsigned_alp_regression2 _ = let start_clp =  CircularLinearProgression.create ~width:3 ~card:(Z.of_int 8) ~step:(Z.of_int 1) (Z.of_int 0) in
+  let alps = CircularLinearProgression.unsigned_alps start_clp in assert_equal ~printer:(fun x -> List.map ~f:clp_printer x |> List.fold ~init:"" ~f:(fun accum x -> accum ^ "|"^x)) [
+    create_alp ~width:3 ~card:(Z.of_int 8) ~step:(Z.of_int 1) (Z.of_int 0)
+  ] alps  
+
+(*big 
+
+(((base 26)(step 2)(card 4)(width 5)), ((base 1)(step 2)(card 2)(width 5)))*)
+  let shiftr_fill0_regression2 _ =
+    let to_shift =  CircularLinearProgression.create ~width:5 ~step:(Z.of_int 2) ~card:(Z.of_int 4) (Z.of_int 26) in
+    let by = CircularLinearProgression.create ~width:5 ~step:(Z.of_int 2) ~card:(Z.of_int 2) Z.one in
+    let res = CircularLinearProgression.right_shift_unsigned to_shift by in 
+    assert_equal ~printer:(clp_printer) (CircularLinearProgression.create ~width:5 ~step:Z.one ~card:(Z.of_int 16) Z.zero) res 
+
+
+  let suite = 
   "Test CLPs" >::: [
     
     "test_canon_casea" >:: test_canon_casea;
@@ -196,6 +241,11 @@ let test_canon_casec _ =
     "test_div_by_zero_union_regression" >:: union_regression3;
     "test_union_regression_second_div_by_zero" >:: union_regression4;
     "test_canon_0stepwitherem" >:: test_canon_0step;
+    "unsigned_alp_regression" >:: unsigned_alp_regression;
+    "shiftr_fill0_regression" >:: shiftr_fill0_regression;
+    test_shiftr_fill0; 
+    "unsigned_alp_regression2" >:: unsigned_alp_regression2;
+    "shiftr_fill0_regression2" >:: shiftr_fill0_regression2;
   ]
 
 let () =

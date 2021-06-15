@@ -264,7 +264,7 @@ let succ (c: canon t) (gaps: computed_clp_facts) (i: Z.t) =
       List.map ~f:(compute_lap c x index_to_value) lst_of_start_bounds
 
  
- let estimate_number_of_alps (c: canon t) = Z.cdiv (Z.mul c.step c.card) (comp_size c)
+ let estimate_number_of_alps (c: canon t) = Z.max (Z.cdiv (Z.mul c.step c.card) (comp_size c)) Z.one
 
  let visit_number_circle (c: canon t) (starting_index: Z.t) = 
   let facts = compute_gap_width c in 
@@ -304,8 +304,13 @@ let group_consecutive (gap_info: computed_clp_facts) (c: canon t) (seq: Z.t OSeq
           | OSeq.Cons (x,rst) -> OSeq.Cons (x, take_big_int (Z.pred i) rst)
 
 
+
+
+
   let slow_alps_strategy  (c: canon t) (wrapping_point: Z.t) (index_to_value: canon t -> Z.t -> Z.t) (alp_limit: Z.t) = 
     let (gap_info, (ic,zeta)) = compute_gap_width_ex c wrapping_point in 
+    print_endline ("ic after gap" ^ (Z.to_string ic) ^ "wrapping point " ^ (Z.to_string wrapping_point) );
+    let ic = if Z.equal zeta Z.zero then succ c gap_info ic else ic in
     (* we start our visit from the index immediately after the wrapping point so that we never have to wrap*)
     let ind_seq = visit_number_circle c ic in
     let alp_groups = group_consecutive gap_info c ind_seq in
@@ -324,10 +329,13 @@ let group_consecutive (gap_info: computed_clp_facts) (c: canon t) (seq: Z.t OSeq
 
 let get_alps  (c:canon t) (wrapping_point: Z.t) index_to_value =
       let alp_limit = estimate_number_of_alps c in
+      print_endline ("alp limit: " ^ (Z.to_string alp_limit));
       let slow_alps = slow_alps_strategy c wrapping_point index_to_value alp_limit in
-      match slow_alps with 
+      print_endline "done with slow strat";
+      let aps = match slow_alps with 
         None -> split_clp_by c wrapping_point index_to_value
-        | Some a -> OSeq.to_list a
+        | Some a -> print_endline "using slow res";OSeq.to_list a in
+    List.map ~f:(fun ap -> if Z.leq ap.card Z.one then {step=Z.zero;base=ap.base;width=ap.width;card=ap.card} else ap) aps
 
 let signed_alps (c:canon t) =  
   let wval = comp_size_with_modifier c (-1) |> Z.pred in 
@@ -584,11 +592,13 @@ let compute_capL_capU (c: alp t) =
 
 let generate_n_bits (n: int) = 
 let rec generate_n_bits'
-  (curr_i: int) (acc: Z.t) = if Int.equal curr_i 0 then acc else 
+  (curr_i: int) (acc: Z.t) = if Int.(<=) curr_i 0 then acc else 
   generate_n_bits' (curr_i-1) (Z.shift_left acc 1 |> Z.succ) in
   generate_n_bits' n Z.zero
 
 let limit_to_bit_range (a: Z.t) (lowerbound :Z.t) (upperbound :Z.t) =
+  assert (Z.leq lowerbound upperbound);
+  print_endline ("v: " ^ (Z.to_string a) ^ "lower: " ^ (Z.to_string lowerbound) ^ "upper: " ^ (Z.to_string upperbound));
   let selected_lower = Z.shift_right_trunc a (Z.to_int lowerbound) in
   (*number of high bits that need to be cleared*)
   let desired_number_of_bits = Z.sub upperbound lowerbound  |> Z.to_int in
@@ -731,7 +741,11 @@ let left_shift =
   create ~width:c1.width ~step:s ~card:n b in
     bin_op_clp_alp_unsigned_same_width left_shift_alp
 
-let all_in_range_are_1 (lower: Z.t) (upper: Z.t) (value: Z.t) = let bts = limit_to_bit_range lower upper value in 
+let all_in_range_are_1 (lower: Z.t) (upper: Z.t) (value: Z.t) = 
+  assert (Z.leq lower upper);
+  print_endline "limiting range";
+  let bts = limit_to_bit_range value lower upper  in 
+  print_endline "done limiting range";
     let num_bits = Z.sub upper lower in 
     let expected_value = Z.pow (Z.succ Z.one) (Z.to_int num_bits) |> Z.pred in 
     Z.equal bts expected_value
@@ -739,30 +753,44 @@ let all_in_range_are_1 (lower: Z.t) (upper: Z.t) (value: Z.t) = let bts = limit_
 (*TODO all shifts may fail due to an overflow need a way to fix that*)
 
 
+(*
+((base 1)(step 0)(card 1)(width 3))by ((base 7)(step 1)(card 8)(width 3))
+*)
+
 let generic_right_shift (shifter: Z.t -> int -> Z.t) (alp_splitter: (alp t -> alp t -> canon t) -> canon t -> canon t -> canon t) (should_consider_second_case: bool) =
   let right_shift_alp (c1: alp t) (c2: alp t) = 
+    print_endline ("shifting an alp: " ^ (sexp_of_t c1 |> Sexp.to_string) ^ "by "  ^ (sexp_of_t c2 |> Sexp.to_string));
     if Z.equal c1.card Z.one && Z.equal c2.card Z.one then
-      create ~width:c1.width ~card:Z.one ~step:Z.zero (Z.shift_right c1.base (Z.to_int c2.base))
+      create ~width:c1.width ~card:Z.one ~step:Z.zero (Z.shift_right_trunc c1.base (Z.to_int c2.base))
     else 
       let last_val_c1 = compute_last_val c1 in 
       let last_val_c2 = compute_last_val c2 in
-      let b = Z.shift_right c1.base ((if Z.geq c1.base Z.zero || not should_consider_second_case then last_val_c2 else c2.base) |> Z.to_int) in
+      print_endline "made it to the base shift";
+      let b = Z.shift_right_trunc c1.base ((if Z.geq c1.base Z.zero || not should_consider_second_case then last_val_c2 else c2.base) |> Z.to_int) in
+      print_endline "made it to the nsz";
       let nsz = Z.pow (Z.succ Z.one) (Z.to_int last_val_c2) in
       let s = if Z.divisible c1.step nsz && (Z.equal c2.card Z.one || Z.divisible c1.base nsz || all_in_range_are_1 Z.zero last_val_c2 c1.base) then 
-        Z.gcd (Z.shift_right c1.step (Z.to_int last_val_c2)) (Z.sub (Z.shift_right c1.base (Z.sub last_val_c2 c2.step |> Z.to_int)) (Z.shift_right c1.base (Z.to_int last_val_c2)))
-    else 
-      Z.one in
-      let n = 
-        if Z.geq c1.base last_val_c1 || not should_consider_second_case then 
-         Z.fdiv (Z.sub (Z.shift_right last_val_c1 (Z.to_int c2.base)) b) s|> Z.succ
+        (print_endline "taking gcd of s";
+        Z.gcd (Z.shift_right_trunc c1.step (Z.to_int last_val_c2)) (Z.sub (Z.shift_right_trunc c1.base (Z.sub last_val_c2 c2.step |> Z.to_int)) (Z.shift_right c1.base (Z.to_int last_val_c2))))
         else 
-          Z.fdiv (Z.sub (Z.shift_right last_val_c1 (Z.to_int last_val_c2)) b) s|> Z.succ
+          (print_endline "step is 1";
+          Z.one) 
+        in
+          let n = 
+            if Z.equal s Z.zero then 
+              Z.one
+            else if Z.geq c1.base last_val_c1 || not should_consider_second_case then 
+              (print_endline  ("last_val_c1 " ^ (Z.to_string last_val_c1));
+              print_endline  ("c2base " ^ (Z.to_string c2.base));
+              Z.fdiv (Z.sub (Z.shift_right_trunc last_val_c1 (Z.to_int c2.base)) b) s|> Z.succ)
+            else 
+              Z.fdiv (Z.sub (Z.shift_right_trunc last_val_c1 (Z.to_int last_val_c2)) b) s|> Z.succ
         in 
         create ~width:c1.width ~card:n ~step:s b in
         alp_splitter right_shift_alp
       
 
-let right_shift_unsigned = generic_right_shift Z.shift_right_trunc bin_op_on_unsigned_alps_same_width false
+let right_shift_unsigned = generic_right_shift Z.shift_right_trunc (fun alp_handler c1 c2 ->  print_endline "handling c1 c2";bin_op_on_unsigned_alps_same_width alp_handler c1 c2) false
 
 let right_shift_signed = generic_right_shift Z.shift_right bin_op_on_signed_unsigned_alps_same_width true
 
@@ -901,3 +929,39 @@ else
 
   let is_false (c1: canon t) = 
     (Z.equal c1.card Z.one) && (Z.equal c1.base Z.zero)
+
+
+  let msb (c: canon t) =
+    let max_val = max_u c in
+    let min_val = min_u c in
+    let sz = comp_size_with_modifier c (-1) in 
+    let can_have_1 = Z.geq max_val sz in
+    let can_have_0 = Z.lt min_val sz in 
+    if can_have_1 && can_have_0 then 
+        top ~width:1
+  else if can_have_1 then 
+    abstract_single_value Z.one ~width:1
+  else 
+  abstract_single_value Z.zero ~width:1
+
+
+  let lsb (c: canon t) = 
+    let modv = unsigned_modulo c (abstract_single_value ~width:c.width (Z.succ Z.one)) in
+    let can_be_odd = clp_contains_point modv Z.one in
+    let can_be_even = clp_contains_point modv Z.zero in
+    if can_be_even && can_be_even then 
+      top ~width:1
+  else if can_be_odd then 
+    abstract_single_value Z.one ~width:1
+else
+  abstract_single_value Z.zero ~width:1
+
+
+let shift_right_fill (fill: canon t) (c: canon t) (by: canon t) = 
+    assert (Int.(=) fill.width 1);
+    print_endline "going";
+    right_shift_unsigned c by
+
+let shift_left_fill (fill: canon t) (c: canon t) (by: canon t) = 
+  assert (Int.(=) fill.width 1);
+  c

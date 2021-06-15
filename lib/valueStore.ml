@@ -53,13 +53,19 @@ module ValueSet = struct
  let apply_function ~f:(f: ClpDomain.t -> ClpDomain.t) = fmap ~default:Top ~f:(fun x -> 
   Below (MemoryRegion.Map.map ~f:f x))
 
+
+  let create_constant (x: ClpDomain.t) = 
+    let m = MemoryRegion.Map.of_alist_exn [(MemoryRegion.Global,x)] in
+    Below m
  let abstract_constant (w: word) = 
-  (let v = CircularLinearProgression.abstract_single_value ~width:(Word.bitwidth w) (Word.to_int64 w |> Stdlib.Result.get_ok |> Z.of_int64) in
-  Below (MemoryRegion.Map.of_alist_exn [(MemoryRegion.Global,v)]))
+  let v = CircularLinearProgression.abstract_single_value ~width:(Word.bitwidth w) (Word.to_int64 w |> Stdlib.Result.get_ok |> Z.of_int64) in
+  create_constant v
 
   let get_constants = function
     | Top -> CircularLinearProgression.top ~width:1
     | Below x -> Option.value ~default:(CircularLinearProgression.bottom ~width:1) (MemoryRegion.Map.find x MemoryRegion.Global)
+
+
 end
 
 module AbstractStore = MapDomain.MakeMap(ALoc)(ValueSet)
