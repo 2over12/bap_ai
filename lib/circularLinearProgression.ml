@@ -409,7 +409,7 @@ let intersection (c1: canon t) (c2: canon t) = if is_bottom c1 && is_bottom c2 t
   let cap_I = create ~width:(Z.log2 (Z.div sz d)) ~card:i_card ~step:i_step i_base in 
   let i_0 = min_u cap_I |> compute_index_value cap_I in
   let i_1 = closest_less_than_n c1 c1.card |>  compute_index_value cap_I in 
-    if not (Z.divisible (Z.sub c1.base c2.base) e) || Z.geq j_0 c2.card || Z.geq i_0 c1.card then bottom ~width:c1.width else 
+    if not (Z.divisible (Z.sub c1.base c2.base) e) || Z.geq j_0 c2.card || Z.geq i_0 c1.card || (is_bottom c1 || is_bottom c2)then bottom ~width:c1.width else 
       let b = compute_index_value c1 i_0 in 
       let total_values = unsigned_concretize cap_I in (* TODO this cant be what they mean*)
       let lh = Z.Set.filter ~f:(fun v -> Z.geq v i_0) total_values |> Z.Set.to_list in
@@ -418,7 +418,7 @@ let intersection (c1: canon t) (c2: canon t) = if is_bottom c1 && is_bottom c2 t
       let diffs = List.map ~f:(fun (f,s) -> Z.sub f s|> Z.abs) prod in 
       let gcd_factor = List.reduce_exn ~f:Z.gcd diffs in
       let s = Z.mul c1.step gcd_factor in 
-      let n = Z.fdiv (Z.sub (compute_index_value c1 i_1) (compute_index_value c1 i_0)) s  |> Z.succ in 
+      let n = if Z.leq Z.zero s then Z.one else Z.fdiv (Z.sub (compute_index_value c1 i_1) (compute_index_value c1 i_0)) s  |> Z.succ in 
         create ~width:c1.width ~card:n ~step:s b
 
 let subset_of (c1: canon t) (c2: canon t) = 
@@ -438,14 +438,15 @@ let neg (c: canon t) = if is_bottom c then c else create ~width:c.width ~step:c.
 
 let bin_op f (c1: canon t) (c2: canon t) = if is_bottom c1 || is_bottom c2 then bottom ~width:c1.width else f c1 c2
 
-let get_last_value (c: 'a t) = compute_index_value c (Z.pred c.card)
 
 let add = let add' c1 c2 =
-  let b = Z.add c1.base c2.base in 
+  let b = Z.erem (Z.add c1.base c2.base) (comp_size c1) in 
     if Z.equal c1.card Z.one && Z.equal c2.card Z.one then create ~width:c1.width ~step:Z.zero ~card:Z.one b
     else
       let s = Z.gcd c1.step c2.step in 
-      let n = Z.fdiv (Z.sub (Z.add (get_last_value c1) (get_last_value c2)) b) s |> Z.succ in
+      let n = Z.fdiv (Z.sub (Z.add (compute_last_val c1) (compute_last_val c2)) b) s |> Z.succ in
+      if (Z.lt n Z.zero) then print_endline ("addition failed on: " ^ (sexp_of_t c1 |> Sexp.to_string) ^ " " ^ (sexp_of_t c2 |> Sexp.to_string) ^"last_val_c1: " ^ (compute_last_val c1 |> Z.to_string) ^"lastvalc2: " ^(compute_last_val c2 |> Z.to_string));
+      assert (Z.geq n Z.zero);
       create ~width:c1.width ~step:s ~card:n b
     in bin_op add'
 
@@ -852,7 +853,9 @@ else
     let inclusive_upper = Z.pred u in
     let bottom_bound = Z.max l (min_from_width ~is_signed:is_signed ~width:c.width) in 
     let top_value = Z.min inclusive_upper (max_from_width ~width:c.width ~is_signed:is_signed) in
-    intersection (create ~width:c.width ~card:(Z.sub top_value bottom_bound) ~step:Z.one bottom_bound) c
+    let n =  (Z.sub top_value bottom_bound) in
+    assert (Z.geq n Z.zero);
+    intersection (create ~width:c.width ~card:n ~step:Z.one bottom_bound) c
 
 
 
@@ -971,8 +974,10 @@ else
 
 let shift_right_fill1 (c: canon t) (by: canon t) = 
   let one = (abstract_single_value ~width:c.width Z.one) in 
-  let by_1_bits = sub (right_shift_unsigned one  by) one in
-  let shift_top_bit_by = sub (abstract_single_value ~width:c.width (Z.of_int c.width)) by_1_bits in 
+  let by_1_bits = sub (left_shift one  by) one in
+  print_endline ("by_1_bits" ^(sexp_of_t by_1_bits |> Sexp.to_string));
+  let shift_top_bit_by_maybe = limit_gte_unsigned (sub (abstract_single_value ~width:c.width (Z.of_int c.width)) by) (abstract_single_value ~width:c.width Z.zero) in 
+  let shift_top_bit_by = if is_bottom shift_top_bit_by_maybe then (abstract_single_value ~width:c.width Z.zero) else shift_top_bit_by_maybe in 
   let or_mask = left_shift by_1_bits shift_top_bit_by in
   logor or_mask (right_shift_unsigned c by)
 

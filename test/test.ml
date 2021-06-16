@@ -142,6 +142,10 @@ let test_canon_casec _ =
     (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 _c1 _c2 -> CircularLinearProgression.Z.Set.union v1 v2)) ~count:200)
   
 
+    let test_intersection =QCheck_ounit.to_ounit2_test (test_binary_operator CircularLinearProgression.intersection CircularLinearProgression.unsigned_concretize 
+    (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 _c1 _c2 -> CircularLinearProgression.Z.Set.inter v1 v2)) ~count:200)
+  
+
 
   
 
@@ -149,10 +153,26 @@ let test_canon_casec _ =
   let collect_pairwise ~f x y = List.cartesian_product (CircularLinearProgression.Z.Set.to_list x) (CircularLinearProgression.Z.Set.to_list y) |> List.map ~f:(fun (x,y) -> f x y) |> CircularLinearProgression.Z.Set.of_list
 
   let shiftr_fill0_func: CircularLinearProgression.canon CircularLinearProgression.t -> CircularLinearProgression.canon CircularLinearProgression.t -> CircularLinearProgression.canon CircularLinearProgression.t = ((CircularLinearProgression.shift_right_fill (CircularLinearProgression.abstract_single_value Z.zero ~width:1)))
+  let z_illogical_shift ~width:(width:int) (to_shift: Z.t) (by: int) = 
+    let it = (Z.shift_right_trunc to_shift by) in
+    let by_1s = (Z.pred (Z.shift_left Z.one by) ) in
+    let diff = width-by in
+    let or_mask = if diff < 0  then 
+      (print_endline "shifting right";Z.shift_right_trunc by_1s (Int.abs diff))
+  else 
+      
+      Z.shift_left by_1s diff in
+    print_endline ("or_mask: " ^ Z.to_string or_mask ^ " orig by 1s: " ^ Z.to_string by_1s);
+    Z.logor or_mask it
+
   let  test_shiftr_fill0 = QCheck_ounit.to_ounit2_test (test_binary_operator  shiftr_fill0_func CircularLinearProgression.unsigned_concretize 
   (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 _c1 _c2 -> 
     collect_pairwise ~f:(fun x y -> Z.shift_right_trunc x (Z.to_int y)) v1 v2)) ~count:200)
 
+    let  test_shiftr_fill1 = QCheck_ounit.to_ounit2_test (test_binary_operator  shiftr_fill0_func CircularLinearProgression.unsigned_concretize 
+    (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 c1 _c2 -> 
+      collect_pairwise ~f:(fun x y -> z_illogical_shift ~width:c1.width  x (Z.to_int y)) v1 v2)) ~count:200)
+  
 
   let shiftr_fill0_regression _ =
     let to_shift =  CircularLinearProgression.create ~width:3 ~step:Z.zero ~card:(Z.of_int 1) Z.one in
@@ -217,10 +237,6 @@ let test_canon_casec _ =
     assert_equal ~printer:(clp_printer) (CircularLinearProgression.create ~width:5 ~step:Z.one ~card:(Z.of_int 16) Z.zero) res 
 
 
-let z_illogical_shift ~width:(width:int) (to_shift: Z.t) (by: int) = 
-    let it = (Z.shift_right_trunc to_shift by) in
-    let or_mask = Z.shift_right_trunc (Z.pred (Z.shift_right_trunc Z.one by) ) (max (width-by) 0) in 
-    Z.logor or_mask it
 
 
 
@@ -230,13 +246,51 @@ let z_illogical_shift ~width:(width:int) (to_shift: Z.t) (by: int) =
     let res = CircularLinearProgression.shift_right_fill1 to_shift by in 
     assert_equal ~printer:(clp_printer) (CircularLinearProgression.create ~width:3 ~step:Z.zero ~card:(Z.of_int 0) Z.zero) res 
 
+    let regression_test_shiftr_fill1 _ = 
+      let to_shift =  CircularLinearProgression.create ~width:11 ~step:(Z.of_int 0) ~card:(Z.of_int 1) (Z.of_int 0) in
+      let by = CircularLinearProgression.create ~width:11 ~step:(Z.of_int 0) ~card:(Z.of_int 1) (Z.of_int 14) in
+      let res = CircularLinearProgression.shift_right_fill1 to_shift by in 
+      assert_equal ~printer:(clp_printer) (CircularLinearProgression.create ~width:11 ~step:Z.zero ~card:(Z.of_int 1) (Z.of_int 2047)) res 
   
+    
+  
+    let test_illogical_shift _ =
+       let res = z_illogical_shift ~width:11 (Z.of_int 0) 14 in
+        assert_equal ~printer:Z.to_string (Z.of_int 2047) res
+
+
     let test_compute_capL_capU _ = 
       let ta = create_alp ~width:3 ~card:(Z.of_int 3) ~step:(Z.one) (Z.of_int 5) in
       let r = CircularLinearProgression.compute_capL_capU ta in
       assert_equal (Z.zero,Z.one) r
 
-  let suite = 
+
+    let adition_regression_test _ = 
+      let a = CircularLinearProgression.create ~width:6  ~card:Z.one ~step:Z.zero (Z.of_int 6) in
+      let b = CircularLinearProgression.create ~width:6  ~card:(Z.of_int 2) ~step:Z.one (Z.of_int 63) in
+      let res = CircularLinearProgression.add a b in 
+      assert_equal ~printer:print_clp ( CircularLinearProgression.create ~width:6  ~card:(Z.of_int 2) ~step:Z.one (Z.of_int 5))res
+
+    let subtraction_regression_test _ = let a = CircularLinearProgression.create ~width:11 ~step:Z.zero ~card:Z.zero Z.zero in 
+      let b =  CircularLinearProgression.create ~width:11 ~step:Z.one ~card:(Z.of_int 2) (Z.of_int 3) in
+      let res = CircularLinearProgression.sub a b in 
+      assert_equal ~printer:print_clp ( CircularLinearProgression.create ~width:11  ~card:(Z.of_int 0) ~step:Z.zero (Z.of_int 0))res
+
+
+    let create_clp (w,b,s,n) =  CircularLinearProgression.create ~width:w ~step:(Z.of_int s) ~card:(Z.of_int n) (Z.of_int b)
+
+    let intersection_regression_test _ = let a = create_clp (11,0,1,15) in
+    let b = create_clp (11,14,0,1) in 
+    let res = CircularLinearProgression.intersection a b in 
+    assert_equal ~printer:print_clp (create_clp (11,14,0,1)) res 
+
+    let intersection_regression_test2 _ = let a = create_clp (3,1,1,4) in
+    let b = create_clp (3,0,1,8) in 
+    print_endline (print_clp a);
+    print_endline (print_clp b);
+    let res = CircularLinearProgression.intersection a b in 
+    assert_equal ~printer:print_clp (create_clp (3,1,1,4)) res 
+      let suite = 
   "Test CLPs" >::: [
     
     "test_canon_casea" >:: test_canon_casea;
@@ -262,11 +316,19 @@ let z_illogical_shift ~width:(width:int) (to_shift: Z.t) (by: int) =
     "test_canon_0stepwitherem" >:: test_canon_0step;
     "unsigned_alp_regression" >:: unsigned_alp_regression;
     "shiftr_fill0_regression" >:: shiftr_fill0_regression;
-    test_shiftr_fill0;
+   (*test_shiftr_fill0;*)
+    (*test_shiftr_fill1;*)
     "unsigned_alp_regression2" >:: unsigned_alp_regression2;
     "shiftr_fill0_regression2" >:: shiftr_fill0_regression2;
     "regression_test_shiftr_fill03" >:: regression_test_shiftr_fill03;
     "test_compute_capL_capU" >:: test_compute_capL_capU;
+    (*"regression_test_shiftr_fill1" >:: regression_test_shiftr_fill1; *)
+   "test_illogical_shift" >:: test_illogical_shift;
+   "adition_regression_test" >:: adition_regression_test;
+   "subtraction_regression_test" >:: subtraction_regression_test;
+   (*test_intersection;*)
+   "intersection_regression_test" >:: intersection_regression_test;
+   "intersection_regression_test2" >:: intersection_regression_test2;
   ]
 
 let () =
