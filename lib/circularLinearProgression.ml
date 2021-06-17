@@ -231,10 +231,61 @@ let pred (c: canon t) (gaps: computed_clp_facts) (i: Z.t) =
         (Z.add (Z.sub i gaps.ia) gaps.ib)
 
 
+let possible_number_of_steps_alpha (c: canon t) (ginfo: computed_clp_facts) (from_i:Z.t) =
+  Z.cdiv (Z.sub (Z.sub (c.card) ginfo.ia) from_i) ginfo.ia
+
+  (* 1 2 4 6*)
+let possible_number_of_steps_beta (c: canon t) (ginfO: computed_clp_facts) (from_i: Z.t) = 
+ Z.cdiv  (Z.sub from_i (Z.pred ginfO.ib)) ginfO.ib
+
+ (*
+ ((base 53)(step 49)(card 14)(width 7))
+
+starting from 12: 12 7 
+gap length -5
+ia 8
+2 steps
+i >= 6
+
+12 - 5)
+ *)
+let possible_number_of_steps_alphabeta (c: canon t) (ginfo: computed_clp_facts) (from_i: Z.t) =
+  let asubb = Z.sub ginfo.ia ginfo.ib in 
+  if (Z.lt asubb Z.zero) then
+    Z.cdiv (Z.sub from_i (Z.pred (Z.sub c.card ginfo.ia))) (Z.neg asubb)
+  else 
+    Z.cdiv (Z.sub ginfo.ib from_i) asubb
+
+let print_assoc l = List.iter ~f:(fun (k,v) -> print_endline (k ^ ":" ^ Z.to_string v)) l
+let is_possible_to_step_with ~available_steps ~get_index_gap (c: canon t)  (ginfo: computed_clp_facts) (from_i: Z.t) (to_i: Z.t) =
+  let index_gap = get_index_gap ginfo in
+  print_assoc [("index_gap",index_gap);("from_i", from_i);("to_i",to_i); ("ia",ginfo.ia)];
+  let diff = Z.sub to_i from_i in
+  Z.divisible diff index_gap && 
+    let num_steps = Z.divexact diff index_gap in 
+    let asteps = (available_steps c ginfo from_i) in 
+    print_endline ("numsteps_avail: " ^ Z.to_string asteps);
+      Z.geq num_steps Z.zero && Z.leq num_steps asteps
+
+
+let is_possible_to_step_with_alpha = is_possible_to_step_with ~available_steps:possible_number_of_steps_alpha ~get_index_gap:(fun ginfo -> ginfo.ia)
+
+let is_possible_to_step_with_beta = is_possible_to_step_with ~available_steps:possible_number_of_steps_beta ~get_index_gap:(fun ginfo -> Z.neg ginfo.ib)
+
+let is_possible_to_step_with_alphabeta = is_possible_to_step_with ~available_steps:possible_number_of_steps_alphabeta ~get_index_gap:(fun ginfo -> Z.sub ginfo.ia ginfo.ib)
+
+
+let get_next_gap_length (c: canon t) (gaps:computed_clp_facts) (i: Z.t) = 
+  if Z.lt i (Z.sub c.card gaps.ia) then
+    `Alpha
+  else if Z.leq gaps.ib i then `Beta else
+    `AplusB
 let succ (c: canon t) (gaps: computed_clp_facts) (i: Z.t) = 
-  if Z.lt i (Z.sub c.card gaps.ia) then (Z.add i gaps.ia) else 
-    if Z.leq gaps.ib i then (Z.sub i gaps.ib) else
-      (Z.sub (Z.add i gaps.ia) gaps.ib)
+  let ngap = get_next_gap_length c gaps i in 
+    match ngap with 
+      | `Alpha -> (Z.add i gaps.ia)
+      | `Beta -> (Z.sub i gaps.ib)
+      | `AplusB -> (Z.sub (Z.add i gaps.ia) gaps.ib)
 
 
   (**must be canonical
@@ -398,28 +449,48 @@ let concretize (index_to_value: 'a t -> Z.t -> Z.t)  (c1: 'a t) =
 let unsigned_concretize (c:'a t) = (concretize compute_index_value) c
 let signed_concretize (c:'a t) = (concretize compute_signed_index_value) c
 
-let intersection (c1: canon t) (c2: canon t) = if is_bottom c1 && is_bottom c2 then bottom ~width:c1.width else
+let print_values = List.iteri ~f:(fun i it -> print_endline ("item " ^ Int.to_string i ^ ": " ^ (Z.to_string it)))
+let intersection (c1: canon t) (c2: canon t) = if is_bottom c1 || is_bottom c2 then bottom ~width:c1.width else
   let sz =  (comp_size c1) in 
-  let (d,s,_) = Z.gcdext c1.step sz in 
+  let (d,s',_) = Z.gcdext c1.step sz in 
   let (e,t,_) = Z.gcdext c2.step d in
+  let s = if Z.lt s' Z.zero then Z.add s' (Z.div sz d) else s' in
   let j_0 = Z.erem (Z.div (Z.mul t (Z.sub c1.base c2.base)) e) (Z.div d e) in
+  if Z.geq j_0 c2.card then 
+    bottom ~width:c1.width
+else
   let i_base = Z.div (Z.mul s (Z.add (Z.sub c2.base c1.base) (Z.mul c2.step j_0))) d in
   let i_step = Z.div (Z.mul c2.step s) e in 
   let i_card = Z.fdiv (Z.sub c2.card j_0) (Z.div d e) in 
+  print_endline "abt to capi";
   let cap_I = create ~width:(Z.log2 (Z.div sz d)) ~card:i_card ~step:i_step i_base in 
-  let i_0 = min_u cap_I |> compute_index_value cap_I in
-  let i_1 = closest_less_than_n c1 c1.card |>  compute_index_value cap_I in 
-    if not (Z.divisible (Z.sub c1.base c2.base) e) || Z.geq j_0 c2.card || Z.geq i_0 c1.card || (is_bottom c1 || is_bottom c2)then bottom ~width:c1.width else 
+  print_clp cap_I |> print_endline;
+  let g0 = min_u cap_I in
+  print_endline ("g0:" ^ Z.to_string g0);
+  let i_0 = g0 |> compute_index_value cap_I in
+  let g1 = closest_less_than_n cap_I c1.card in
+  let i_1 = g1 |>  compute_index_value cap_I in 
+  print_values [d;s;e;t;j_0;i_base;i_step;i_card;i_0;i_1];
+    if not (Z.divisible (Z.sub c1.base c2.base) e) || Z.geq j_0 c2.card || Z.geq i_0 c1.card || (is_bottom c1 || is_bottom c2) then (print_endline "going bottom"; bottom ~width:c1.width) else 
+      (print_endline "not going bottom";
       let b = compute_index_value c1 i_0 in 
-      let total_values = unsigned_concretize cap_I in (* TODO this cant be what they mean*)
-      let lh = Z.Set.filter ~f:(fun v -> Z.geq v i_0) total_values |> Z.Set.to_list in
-      let rh = Z.Set.filter ~f:(fun v -> Z.leq v i_1) total_values |> Z.Set.to_list in
-      let prod = List.cartesian_product lh rh in 
-      let diffs = List.map ~f:(fun (f,s) -> Z.sub f s|> Z.abs) prod in 
-      let gcd_factor = List.reduce_exn ~f:Z.gcd diffs in
-      let s = Z.mul c1.step gcd_factor in 
-      let n = if Z.leq Z.zero s then Z.one else Z.fdiv (Z.sub (compute_index_value c1 i_1) (compute_index_value c1 i_0)) s  |> Z.succ in 
-        create ~width:c1.width ~card:n ~step:s b
+      let ginfo = compute_gap_width cap_I in 
+      let smul =
+        if Z.equal g0 g1 then 
+          None
+        else
+        match get_next_gap_length cap_I ginfo g0 with
+        | `Alpha ->print_endline "going alpha"; if is_possible_to_step_with_alpha cap_I ginfo g0 g1 then Some ginfo.alpha else None
+        | `Beta -> print_endline "going beta";if is_possible_to_step_with_beta cap_I ginfo g0 g1 then Some ginfo.beta else (print_endline "failed to win beta"; None)
+        | `AplusB -> print_endline "going alpha beta"; (if is_possible_to_step_with_alphabeta cap_I ginfo g0 g1 then Some (Z.add ginfo.alpha ginfo.beta) else None) in
+      let smul = Option.value smul ~default:(Z.gcd ginfo.alpha ginfo.beta) in
+      print_endline ("smul" ^ Z.to_string smul);
+      let s = Z.erem (Z.mul smul c1.step) sz in
+      print_endline ("diff: " ^ Z.to_string (Z.sub (compute_index_value c1 i_1) (compute_index_value c1 i_0)));
+      if Z.gt s Z.zero then print_endline ("fdiv" ^ Z.to_string (Z.div (Z.sub (compute_index_value c1 i_1) (compute_index_value c1 i_0)) s ) );
+      let n = if Z.leq s Z.zero then Z.one else Z.div (Z.erem (Z.sub (compute_index_value c1 i_1) (compute_index_value c1 i_0)) sz) s  |> Z.succ in 
+      print_endline ("s: " ^ Z.to_string s ^ " b: " ^ Z.to_string b ^ " n: " ^ Z.to_string n);
+        create ~width:c1.width ~card:n ~step:s b)
 
 let subset_of (c1: canon t) (c2: canon t) = 
     (is_bottom c1 && is_bottom c2) || (not (Z.gt c1.card c2.card) && 

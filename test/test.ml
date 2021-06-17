@@ -142,8 +142,10 @@ let test_canon_casec _ =
     (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 _c1 _c2 -> CircularLinearProgression.Z.Set.union v1 v2)) ~count:200)
   
 
+    let compute_concrete_interseciton=(apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 _c1 _c2 -> CircularLinearProgression.Z.Set.inter v1 v2))
+
     let test_intersection =QCheck_ounit.to_ounit2_test (test_binary_operator CircularLinearProgression.intersection CircularLinearProgression.unsigned_concretize 
-    (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 _c1 _c2 -> CircularLinearProgression.Z.Set.inter v1 v2)) ~count:200)
+    compute_concrete_interseciton ~count:200)
   
 
 
@@ -290,6 +292,63 @@ let test_canon_casec _ =
     print_endline (print_clp b);
     let res = CircularLinearProgression.intersection a b in 
     assert_equal ~printer:print_clp (create_clp (3,1,1,4)) res 
+
+
+    let intersection_regression_test3 _ = let a = create_clp (11,855,866,45) in
+    let b = create_clp (11,41,6,4) in 
+    print_endline (print_clp a);
+    print_endline (print_clp b);
+    "concrete_set" ^ print_set  (compute_concrete_interseciton a b) |> print_endline ;
+    let res = CircularLinearProgression.intersection a b in 
+    assert_equal ~printer:print_clp (create_clp (11,47,12,2)) res 
+
+
+    let intersection_regression_test4 _ = let a = create_clp (9,0,0,0) in
+    let b = create_clp (9,92,122,2) in 
+    print_endline (print_clp a);
+    print_endline (print_clp b);
+    "concrete_set" ^ print_set  (compute_concrete_interseciton a b) |> print_endline ;
+    let res = CircularLinearProgression.intersection a b in 
+    assert_equal ~printer:print_clp (create_clp (9,0,0,0)) res 
+
+
+    (*(((base 20)(step 0)(card 1)(width 6)), ((base 0)(step 1)(card 2)(width 6))) *)
+
+
+    let intersection_regression_test5 _ = let a = create_clp (6,20,0,1) in
+    let b = create_clp (6,0,1,2) in 
+    print_endline (print_clp a);
+    print_endline (print_clp b);
+    "concrete_set" ^ print_set  (compute_concrete_interseciton a b) |> print_endline ;
+    let res = CircularLinearProgression.intersection a b in 
+    assert_equal ~printer:print_clp (create_clp (6,0,0,0)) res 
+
+
+    let intersection_regression_test6 _ = let a = create_clp (7,33,47,5) in
+    let b = create_clp (7,79,1,15) in 
+    print_endline (print_clp a);
+    print_endline (print_clp b);
+    "concrete_set" ^ print_set  (compute_concrete_interseciton a b) |> print_endline ;
+    let res = CircularLinearProgression.intersection a b in 
+    assert_equal ~printer:print_clp (create_clp (7,80,13,2)) res 
+
+
+    let intersection_regression_test7 _ = let a = create_clp (7,33,47,13) in
+    let b = create_clp (7,79,1,14) in 
+    print_endline (print_clp a);
+    print_endline (print_clp b);
+    "concrete_set" ^ print_set  (compute_concrete_interseciton a b) |> print_endline ;
+    let res = CircularLinearProgression.intersection a b in 
+    assert_equal ~printer:print_clp (create_clp (7,80,5,2)) res 
+
+
+    let intersection_regression_test8 _ = let a = create_clp (7,33,47,13) in
+    let b = create_clp (7,79,1,15) in 
+    print_endline (print_clp a);
+    print_endline (print_clp b);
+    "concrete_set" ^ print_set  (compute_concrete_interseciton a b) |> print_endline ;
+    let res = CircularLinearProgression.intersection a b in 
+    assert_equal ~printer:print_clp (create_clp (7,80,47,4)) res 
       let suite = 
   "Test CLPs" >::: [
     
@@ -326,9 +385,15 @@ let test_canon_casec _ =
    "test_illogical_shift" >:: test_illogical_shift;
    "adition_regression_test" >:: adition_regression_test;
    "subtraction_regression_test" >:: subtraction_regression_test;
-   (*test_intersection;*)
+   (* test_intersection;*)
    "intersection_regression_test" >:: intersection_regression_test;
    "intersection_regression_test2" >:: intersection_regression_test2;
+   "intersection_regression_test3" >:: intersection_regression_test3; 
+   "intersection_regression_test4" >:: intersection_regression_test4;
+   "intersection_regression_test5" >:: intersection_regression_test5;
+   "intersection_regression_test6" >:: intersection_regression_test6;
+   "intersection_regression_test7" >:: intersection_regression_test7;
+   "intersection_regression_test8" >:: intersection_regression_test8
   ]
 
 let () =
