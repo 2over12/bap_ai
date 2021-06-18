@@ -395,7 +395,7 @@ let test_canon_casec _ =
    "test_illogical_shift" >:: test_illogical_shift;
    "adition_regression_test" >:: adition_regression_test;
    "subtraction_regression_test" >:: subtraction_regression_test;
-   (* test_intersection;*)
+    test_intersection;
    "intersection_regression_test" >:: intersection_regression_test;
    "intersection_regression_test2" >:: intersection_regression_test2;
    "intersection_regression_test3" >:: intersection_regression_test3; 
