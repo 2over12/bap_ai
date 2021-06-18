@@ -348,7 +348,7 @@ let test_canon_casec _ =
     print_endline (print_clp b);
     "concrete_set" ^ print_set  (compute_concrete_interseciton a b) |> print_endline ;
     let res = CircularLinearProgression.intersection a b in 
-    assert_equal ~printer:print_clp (create_clp (7,80,47,4)) res 
+    assert_equal ~printer:print_clp (create_clp (7,80,47,12)) res 
       let suite = 
   "Test CLPs" >::: [
     

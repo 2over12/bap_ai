@@ -172,7 +172,7 @@ let shrink_to_gap_gt0 = shrink num_steps_leq_nsub1 num_steps_gt0
 
  
 
-type computed_clp_facts = {ia:Z.t;alpha:Z.t; ib:Z.t; beta: Z.t}
+type computed_clp_facts = {ia:Z.t;alpha:Z.t; ib:Z.t; beta: Z.t} [@@deriving sexp]
 let sexp_of_clp_facts (v: computed_clp_facts)  = Sexp.List [Sexp.Atom (Z.to_string v.ia); Sexp.Atom (Z.to_string v.ib); Sexp.Atom (Z.to_string v.alpha); Sexp.Atom (Z.to_string v.beta)]
 let clp_facts_of_sexp (v:Sexp.t) = raise (Failure "") (* TODO parse the thing*)
 
@@ -446,6 +446,9 @@ let concretize (index_to_value: 'a t -> Z.t -> Z.t)  (c1: 'a t) =
   let rec concretize' n (total: Z.Set.t) = if Z.equal c1.card n then total else let curr_val = index_to_value c1 n in concretize' (Z.succ n) (Z.Set.add total curr_val )
     in concretize' Z.zero Z.Set.empty
 
+let unsigned_concretize_order (c: 'a t) = let rec concretize'  n = if Z.equal c.card n then [] else compute_index_value c n ::(concretize' (Z.succ n)) in 
+    concretize' Z.zero
+
 let unsigned_concretize (c:'a t) = (concretize compute_index_value) c
 let signed_concretize (c:'a t) = (concretize compute_signed_index_value) c
 
@@ -475,6 +478,7 @@ else
       (print_endline "not going bottom";
       let b = compute_index_value c1 i_0 in 
       let ginfo = compute_gap_width cap_I in 
+      sexp_of_computed_clp_facts ginfo |> Sexp.to_string |> print_endline; 
       let smul =
         if Z.equal g0 g1 then 
           None
@@ -485,10 +489,10 @@ else
         | `AplusB -> print_endline "going alpha beta"; (if is_possible_to_step_with_alphabeta cap_I ginfo g0 g1 then Some (Z.add ginfo.alpha ginfo.beta) else None) in
       let smul = Option.value smul ~default:(Z.gcd ginfo.alpha ginfo.beta) in
       print_endline ("smul" ^ Z.to_string smul);
-      let s = Z.erem (Z.mul smul c1.step) sz in
+      let s = (Z.mul smul c1.step) in
       print_endline ("diff: " ^ Z.to_string (Z.sub (compute_index_value c1 i_1) (compute_index_value c1 i_0)));
       if Z.gt s Z.zero then print_endline ("fdiv" ^ Z.to_string (Z.div (Z.sub (compute_index_value c1 i_1) (compute_index_value c1 i_0)) s ) );
-      let n = if Z.leq s Z.zero then Z.one else Z.div (Z.erem (Z.sub (compute_index_value c1 i_1) (compute_index_value c1 i_0)) sz) s  |> Z.succ in 
+      let n = if Z.leq s Z.zero then Z.one else Z.div  (Z.sub (compute_index_value_without_mod c1 i_1) (compute_index_value_without_mod c1 i_0)) s  |> Z.succ in 
       print_endline ("s: " ^ Z.to_string s ^ " b: " ^ Z.to_string b ^ " n: " ^ Z.to_string n);
         create ~width:c1.width ~card:n ~step:s b)
 

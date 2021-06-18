@@ -38,6 +38,7 @@ module MakeMap(X: AbstractDomain.SET)(Y: AbstractDomain.CPO) = struct
   | (_, None) -> None
   | (None, _) -> None
   | (Some x',Some y') -> checked_op f x' y') x y
+
   let bot = X.Map.empty
 
   let narrow x y = 
