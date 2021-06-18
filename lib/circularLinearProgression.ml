@@ -464,7 +464,7 @@ let intersection (c1: canon t) (c2: canon t) = if is_bottom c1 || is_bottom c2 t
 else
   let i_base = Z.div (Z.mul s (Z.add (Z.sub c2.base c1.base) (Z.mul c2.step j_0))) d in
   let i_step = Z.div (Z.mul c2.step s) e in 
-  let i_card = Z.fdiv (Z.sub c2.card j_0) (Z.div d e) in 
+  let i_card = Z.cdiv (Z.sub c2.card j_0) (Z.div d e) in 
   print_endline "abt to capi";
   let cap_I = create ~width:(Z.log2 (Z.div sz d)) ~card:i_card ~step:i_step i_base in 
   print_clp cap_I |> print_endline;

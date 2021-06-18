@@ -349,6 +349,16 @@ let test_canon_casec _ =
     "concrete_set" ^ print_set  (compute_concrete_interseciton a b) |> print_endline ;
     let res = CircularLinearProgression.intersection a b in 
     assert_equal ~printer:print_clp (create_clp (7,80,47,12)) res 
+
+
+
+    let intersection_regression_test9 _ = let a = create_clp (7,1,4,2) in
+    let b = create_clp (7,0,5,2) in 
+    print_endline (print_clp a);
+    print_endline (print_clp b);
+    "concrete_set" ^ print_set  (compute_concrete_interseciton a b) |> print_endline ;
+    let res = CircularLinearProgression.intersection a b in 
+    assert_equal ~printer:print_clp (create_clp (7,5,0,11)) res
       let suite = 
   "Test CLPs" >::: [
     
@@ -393,7 +403,8 @@ let test_canon_casec _ =
    "intersection_regression_test5" >:: intersection_regression_test5;
    "intersection_regression_test6" >:: intersection_regression_test6;
    "intersection_regression_test7" >:: intersection_regression_test7;
-   "intersection_regression_test8" >:: intersection_regression_test8
+   "intersection_regression_test8" >:: intersection_regression_test8;
+   "intersection_regression_test9" >:: intersection_regression_test9
   ]
 
 let () =
