@@ -814,15 +814,13 @@ let left_shift =
 
   let left_shift_alp (c1: canon t) (c2: alp t) = 
     let sz = comp_size c1 in 
-    let shift_left_on_circle trgt by = Z.erem (Z.shift_left trgt by) sz in
-  print_endline ("in left shift " ^ (sexp_of_t c1 |> Sexp.to_string)  ^ (sexp_of_t c2 |> Sexp.to_string));
-  let b = shift_left_on_circle c1.base  (Z.to_int c2.base) (*todo this may not work if c2base is too big*) in
+  let b = Z.shift_left c1.base  (Z.to_int c2.base) (*todo this may not work if c2base is too big*) in
   let s = if Z.equal c2.card Z.one then 
-    shift_left_on_circle c1.step (Z.to_int c2.base)
+    Z.shift_left c1.step (Z.to_int c2.base)
   else 
-    shift_left_on_circle (Z.gcd c1.base c1.step) (Z.to_int c2.base) in
+    Z.shift_left (Z.gcd c1.base c1.step) (Z.to_int c2.base) in
     print_endline ("b" ^ (Z.to_string b));
-  let n = if Z.equal Z.zero s then Z.one else (Z.fdiv (Z.sub (shift_left_on_circle (compute_last_val c1) (Z.to_int (compute_last_val c2))) b) s |> Z.succ) 
+  let n = if Z.equal Z.zero s then Z.one else (Z.div (Z.sub (Z.shift_left (compute_last_val_unwrapped c1) (Z.to_int (compute_last_val_unwrapped c2))) b) s |> Z.succ) (*TODO should this be wrapping*)
     in (*todo this also could fail*) (* maybe we want to make sure these shifts are on mod 2^w*)
     assert (Z.geq n Z.zero);
     create ~width:c1.width ~step:s ~card:n b in

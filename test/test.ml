@@ -149,6 +149,14 @@ let test_canon_casec _ =
   
 
 
+    
+    let compute_pw_func ~f = (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 c1 c2 -> 
+     List.map ~f:(fun (x,y) -> f c1 c2 x y) (List.cartesian_product (CircularLinearProgression.Z.Set.to_list v1) (CircularLinearProgression.Z.Set.to_list v2)) |> CircularLinearProgression.Z.Set.of_list)   )
+      
+    let compute_left_shifts = compute_pw_func ~f:(fun c1 _c2 x y -> Z.erem (Z.shift_left x (Z.to_int y )) (CircularLinearProgression.comp_size c1) )
+  
+     let test_left_shift = QCheck_ounit.to_ounit2_test (test_binary_operator CircularLinearProgression.left_shift CircularLinearProgression.unsigned_concretize 
+     compute_left_shifts ~count:200)
   
 
   
@@ -359,6 +367,26 @@ let test_canon_casec _ =
     "concrete_set" ^ print_set  (compute_concrete_interseciton a b) |> print_endline ;
     let res = CircularLinearProgression.intersection a b in 
     assert_equal ~printer:print_clp (create_clp (7,5,0,11)) res
+
+
+
+    let left_shift_regression_test _ = let a = create_clp (11,0,1,2) in
+    let b = create_clp (7,14,0,1) in 
+    print_endline (print_clp a);
+    print_endline (print_clp b);
+    "concrete_set" ^ print_set  (compute_left_shifts a b) |> print_endline ;
+    let res = CircularLinearProgression.left_shift a b in 
+    assert_equal ~printer:print_clp (create_clp (11,0,16384,11)) res
+
+
+    let left_shift_regression_test2 _ = let a = create_clp (3,1,0,1) in
+    let b = create_clp (3,0,1,4) in 
+    print_endline (print_clp a);
+    print_endline (print_clp b);
+    "concrete_set" ^ print_set  (compute_left_shifts a b) |> print_endline ;
+    let res = CircularLinearProgression.left_shift a b in 
+    assert_equal ~printer:print_clp (create_clp (3,0,1,8)) res
+
       let suite = 
   "Test CLPs" >::: [
     
@@ -396,6 +424,9 @@ let test_canon_casec _ =
    "adition_regression_test" >:: adition_regression_test;
    "subtraction_regression_test" >:: subtraction_regression_test;
     test_intersection;
+    test_left_shift;
+   "left_shift_regression_test" >:: left_shift_regression_test;
+   "left_shift_regression_test2" >:: left_shift_regression_test2;
    "intersection_regression_test" >:: intersection_regression_test;
    "intersection_regression_test2" >:: intersection_regression_test2;
    "intersection_regression_test3" >:: intersection_regression_test3; 
@@ -404,7 +435,8 @@ let test_canon_casec _ =
    "intersection_regression_test6" >:: intersection_regression_test6;
    "intersection_regression_test7" >:: intersection_regression_test7;
    "intersection_regression_test8" >:: intersection_regression_test8;
-   "intersection_regression_test9" >:: intersection_regression_test9
+   "intersection_regression_test9" >:: intersection_regression_test9;
+   
   ]
 
 let () =
