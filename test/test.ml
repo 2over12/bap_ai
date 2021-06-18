@@ -132,7 +132,10 @@ let test_canon_casec _ =
 
   let test_unary_operator_same_width  abstract_op concrete_op concretization_function reduction_function ~count = test_unary_operator abstract_op concrete_op concretization_function reduction_function (fun a -> a.width) ~count
 
-  let test_neg = QCheck_ounit.to_ounit2_test  (test_unary_operator_same_width CircularLinearProgression.neg CircularLinearProgression.Z.neg CircularLinearProgression.signed_concretize CircularLinearProgression.interpret_signed_value ~count:200)
+  let test_neg = QCheck_ounit.to_ounit2_test  (test_unary_operator_same_width CircularLinearProgression.neg CircularLinearProgression.Z.neg CircularLinearProgression.unsigned_concretize CircularLinearProgression.interpret_unsigned_value ~count:200)
+
+
+  let test_not = QCheck_ounit.to_ounit2_test  (test_unary_operator_same_width CircularLinearProgression.not_clp CircularLinearProgression.Z.lognot CircularLinearProgression.signed_concretize CircularLinearProgression.interpret_signed_value ~count:200)
 
   let test_not_signed  = QCheck_ounit.to_ounit2_test (test_unary_operator_same_width  CircularLinearProgression.not_clp CircularLinearProgression.Z.lognot CircularLinearProgression.signed_concretize CircularLinearProgression.interpret_signed_value ~count:200)
 
@@ -158,7 +161,14 @@ let test_canon_casec _ =
      let test_left_shift = QCheck_ounit.to_ounit2_test (test_binary_operator CircularLinearProgression.left_shift CircularLinearProgression.unsigned_concretize 
      compute_left_shifts ~count:200)
   
+     let compute_ors = compute_pw_func ~f:(fun _c1 _c2 x y -> Z.logor x y)
 
+     let compute_ands = compute_pw_func ~f:(fun _c1 _c2 x y -> Z.logand x y)
+     let test_or = QCheck_ounit.to_ounit2_test (test_binary_operator CircularLinearProgression.logor CircularLinearProgression.unsigned_concretize 
+     compute_ors ~count:200)
+
+     let test_and = QCheck_ounit.to_ounit2_test (test_binary_operator CircularLinearProgression.logand CircularLinearProgression.unsigned_concretize 
+     compute_ands ~count:200)
   
   let collect_pairwise ~f x y = List.cartesian_product (CircularLinearProgression.Z.Set.to_list x) (CircularLinearProgression.Z.Set.to_list y) |> List.map ~f:(fun (x,y) -> f x y) |> CircularLinearProgression.Z.Set.of_list
 
@@ -387,7 +397,37 @@ let test_canon_casec _ =
     let res = CircularLinearProgression.left_shift a b in 
     assert_equal ~printer:print_clp (create_clp (3,0,1,8)) res
 
-      let suite = 
+
+    let left_shift_regression_test3 _ = let a = create_clp (6,49,29,2) in
+    let b = create_clp (6,1,4,2) in 
+    print_endline (print_clp a);
+    print_endline (print_clp b);
+    "concrete_set" ^ print_set  (compute_left_shifts a b) |> print_endline ;
+    let res = CircularLinearProgression.left_shift a b in 
+    assert_equal ~printer:print_clp (create_clp (6,0,2,32)) res
+
+    let or_regression_test _ = let a = create_clp (11,0,1,3) in
+    let b = create_clp (11,14,0,1) in 
+    print_endline (print_clp a);
+    print_endline (print_clp b);
+    "concrete_set" ^ print_set  (compute_ors a b) |> print_endline ;
+    let res = CircularLinearProgression.left_shift a b in 
+    assert_equal ~printer:print_clp (create_clp (3,0,1,8)) res
+
+
+
+
+    let regression_test ~abstract_op ~concrete_op clp1 clp2 expected =let a = create_clp clp1 in
+    let b = create_clp clp2  in 
+    print_endline (print_clp a);
+    print_endline (print_clp b);
+    "concrete_set" ^ print_set  (concrete_op a b) |> print_endline ;
+    let res = abstract_op a b in 
+    assert_equal ~printer:print_clp (create_clp expected) res
+
+
+    let and_regression_test _ = regression_test ~abstract_op:CircularLinearProgression.logand ~concrete_op:compute_ands (11,0,1,3) (11,14,0,1) (11,0,2,2)
+    let suite = 
   "Test CLPs" >::: [
     
     "test_canon_casea" >:: test_canon_casea;
@@ -436,7 +476,12 @@ let test_canon_casec _ =
    "intersection_regression_test7" >:: intersection_regression_test7;
    "intersection_regression_test8" >:: intersection_regression_test8;
    "intersection_regression_test9" >:: intersection_regression_test9;
-   
+   "left_shift_regression_test3" >:: left_shift_regression_test3;
+   (*test_and;*)
+   "and_regression_test" >:: and_regression_test;
+  (* "or_regression_test" >:: or_regression_test;*)
+   (*test_or;*)
+   test_neg
   ]
 
 let () =
