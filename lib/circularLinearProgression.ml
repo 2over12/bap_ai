@@ -764,12 +764,12 @@ let compute_bsn_logand (c1: alp t) (c2:alp t) =
     let last_c2 = (compute_last_val c2) in 
     let u = Z.min (Z.logor (Z.logand last_c1 last_c2) m) last_c1 |> Z.min last_c2 in 
     let twototheL = (Z.pow (Z.succ Z.one) (Z.to_int capL)) in
-    let s = if Z.gt cap_U1 cap_U2 && Z.equal capU cap_U1 && Z.equal capU' capL then
+    let s = (*if Z.gt cap_U1 cap_U2 && Z.equal capU cap_U1 && Z.equal capU' capL then
       Z.max c1.step twototheL 
     else 
       if Z.gt cap_U2 cap_U1  && Z.equal capU cap_U2 && Z.equal capU' capL then
       Z.max c2.step twototheL
-    else
+    else*) (*TODO!!! this is a huge loss in precision*)
       twototheL in
     let and_of_bases = (Z.logand c1.base c2.base) in
     let b = Z.add and_of_bases (Z.mul s (Z.cdiv (Z.sub l and_of_bases) s)) in

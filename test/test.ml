@@ -453,7 +453,7 @@ let test_canon_casec _ =
     let not_comp_test3 = not_comp_test (11,2032,1,2) (11,14,1,2)
 
 
-    let and_regression_unwrapped_compute_of_s _ = regression_test ~abstract_op:CircularLinearProgression.logand ~concrete_op:compute_ands (7,28,0,1)   (7,99,9,3) (7,0,4,3)
+    let and_regression_unwrapped_compute_of_s _ = regression_test ~abstract_op:CircularLinearProgression.logand ~concrete_op:compute_ands (7,28,0,1)   (7,99,9,3) (7,0,4,6)
 
     let or_regression2 _ = regression_test ~abstract_op: CircularLinearProgression.logor ~concrete_op:compute_ors (12,3935,1031,6) (12,1,0,1) (12,1,0,1)
     let suite = 
