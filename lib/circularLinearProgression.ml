@@ -758,6 +758,7 @@ let compute_bsn_logand (c1: alp t) (c2:alp t) =
   if Z.leq capL capU then
     let capU' = compute_U' c1 c2 cap_U1 cap_U2 capU in 
     let m = create_mask capL capU' in
+    "m mask:" ^Z.to_string m |> print_endline;
     let l = Z.logand (Z.logand c1.base c2.base) (Z.lognot m) in 
     let last_c1 = (compute_last_val c1) in 
     let last_c2 = (compute_last_val c2) in 

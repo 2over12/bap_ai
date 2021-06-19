@@ -123,7 +123,7 @@ let test_canon_casec _ =
  
   
 
-  let test_binary_operator ~name abstract_op concretization_function compute_concrete_values ~count = QCheck.Test.make ~name:name ~count:count arbitrary_clp_pair (fun (c1,c2) -> 
+  let test_binary_operator_is_over_approx ~name abstract_op concretization_function compute_concrete_values ~count = QCheck.Test.make ~name:name ~count:count arbitrary_clp_pair (fun (c1,c2) -> 
     let concrete_values = compute_concrete_values c1 c2 in
     let resulting_abstract_values = abstract_op c1 c2 |> concretization_function in 
     CircularLinearProgression.Z.Set.is_subset concrete_values  ~of_:resulting_abstract_values
@@ -141,13 +141,13 @@ let test_canon_casec _ =
 
   let test_not_unsigned = QCheck_ounit.to_ounit2_test (test_unary_operator_same_width  ~name:"qcheckunsignednot" CircularLinearProgression.not_clp CircularLinearProgression.Z.lognot CircularLinearProgression.unsigned_concretize CircularLinearProgression.interpret_unsigned_value ~count:200)
   
-  let test_union =QCheck_ounit.to_ounit2_test (test_binary_operator ~name:"test_union" CircularLinearProgression.union CircularLinearProgression.unsigned_concretize 
+  let test_union =QCheck_ounit.to_ounit2_test (test_binary_operator_is_over_approx ~name:"test_union" CircularLinearProgression.union CircularLinearProgression.unsigned_concretize 
     (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 _c1 _c2 -> CircularLinearProgression.Z.Set.union v1 v2)) ~count:200)
   
 
     let compute_concrete_interseciton=(apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 _c1 _c2 -> CircularLinearProgression.Z.Set.inter v1 v2))
 
-    let test_intersection =QCheck_ounit.to_ounit2_test (test_binary_operator  ~name:"test_intersection" CircularLinearProgression.intersection CircularLinearProgression.unsigned_concretize 
+    let test_intersection =QCheck_ounit.to_ounit2_test (test_binary_operator_is_over_approx  ~name:"test_intersection" CircularLinearProgression.intersection CircularLinearProgression.unsigned_concretize 
     compute_concrete_interseciton ~count:200)
   
 
@@ -158,16 +158,16 @@ let test_canon_casec _ =
       
     let compute_left_shifts = compute_pw_func ~f:(fun c1 _c2 x y -> Z.erem (Z.shift_left x (Z.to_int y )) (CircularLinearProgression.comp_size c1) )
   
-     let test_left_shift = QCheck_ounit.to_ounit2_test (test_binary_operator ~name:"test_left_shift"  CircularLinearProgression.left_shift CircularLinearProgression.unsigned_concretize 
+     let test_left_shift = QCheck_ounit.to_ounit2_test (test_binary_operator_is_over_approx ~name:"test_left_shift"  CircularLinearProgression.left_shift CircularLinearProgression.unsigned_concretize 
      compute_left_shifts ~count:200)
   
      let compute_ors = compute_pw_func ~f:(fun _c1 _c2 x y -> Z.logor x y)
 
      let compute_ands = compute_pw_func ~f:(fun _c1 _c2 x y -> Z.logand x y)
-     let test_or = QCheck_ounit.to_ounit2_test (test_binary_operator ~name:"test_or"  CircularLinearProgression.logor CircularLinearProgression.unsigned_concretize 
+     let test_or = QCheck_ounit.to_ounit2_test (test_binary_operator_is_over_approx ~name:"test_or"  CircularLinearProgression.logor CircularLinearProgression.unsigned_concretize 
      compute_ors ~count:200)
 
-     let test_and = QCheck_ounit.to_ounit2_test (test_binary_operator  ~name:"test_and" CircularLinearProgression.logand CircularLinearProgression.unsigned_concretize 
+     let test_and = QCheck_ounit.to_ounit2_test (test_binary_operator_is_over_approx  ~name:"test_and" CircularLinearProgression.logand CircularLinearProgression.unsigned_concretize 
      compute_ands ~count:200)
   
   let collect_pairwise ~f x y = List.cartesian_product (CircularLinearProgression.Z.Set.to_list x) (CircularLinearProgression.Z.Set.to_list y) |> List.map ~f:(fun (x,y) -> f x y) |> CircularLinearProgression.Z.Set.of_list
@@ -185,11 +185,11 @@ let test_canon_casec _ =
     print_endline ("or_mask: " ^ Z.to_string or_mask ^ " orig by 1s: " ^ Z.to_string by_1s);
     Z.logor or_mask it
 
-  let  test_shiftr_fill0 = QCheck_ounit.to_ounit2_test (test_binary_operator ~name:"test_shiftr_fill0" shiftr_fill0_func CircularLinearProgression.unsigned_concretize 
+  let  test_shiftr_fill0 = QCheck_ounit.to_ounit2_test (test_binary_operator_is_over_approx ~name:"test_shiftr_fill0" shiftr_fill0_func CircularLinearProgression.unsigned_concretize 
   (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 _c1 _c2 -> 
     collect_pairwise ~f:(fun x y -> Z.shift_right_trunc x (Z.to_int y)) v1 v2)) ~count:200)
 
-    let  test_shiftr_fill1 = QCheck_ounit.to_ounit2_test (test_binary_operator  ~name:"test_shiftr_fill1" shiftr_fill0_func CircularLinearProgression.unsigned_concretize 
+    let  test_shiftr_fill1 = QCheck_ounit.to_ounit2_test (test_binary_operator_is_over_approx  ~name:"test_shiftr_fill1" shiftr_fill0_func CircularLinearProgression.unsigned_concretize 
     (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 c1 _c2 -> 
       collect_pairwise ~f:(fun x y -> z_illogical_shift ~width:c1.width  x (Z.to_int y)) v1 v2)) ~count:200)
   
@@ -451,6 +451,11 @@ let test_canon_casec _ =
     let and_comp_test _ = regression_test ~abstract_op:CircularLinearProgression.logand ~concrete_op:compute_ands (11,2045,1,3)   (11,2033,0,1) (11,2032,1,2)
 
     let not_comp_test3 = not_comp_test (11,2032,1,2) (11,14,1,2)
+
+
+    let and_regression_unwrapped_compute_of_s _ = regression_test ~abstract_op:CircularLinearProgression.logand ~concrete_op:compute_ands (7,28,0,1)   (7,99,9,3) (7,0,4,3)
+
+    let or_regression2 _ = regression_test ~abstract_op: CircularLinearProgression.logor ~concrete_op:compute_ors (12,3935,1031,6) (12,1,0,1) (12,1,0,1)
     let suite = 
   "Test CLPs" >::: [
     
@@ -503,6 +508,7 @@ let test_canon_casec _ =
    "left_shift_regression_test3" >:: left_shift_regression_test3;
     test_and;
    "and_regression_test" >:: and_regression_test;
+   "and_regression_unwrapped_compute_of_s" >:: and_regression_unwrapped_compute_of_s;
     "or_regression_test" >:: or_regression_test;
     "not_comp_test1" >:: not_comp_test1;
     "not_comp_test2" >:: not_comp_test2;
