@@ -694,7 +694,7 @@ let get_set_lsb (a: Z.t) = let set_lsb = Z.trailing_zeros a in if Int.equal Int.
 
 
 let generic_comp_range (lower: Z.t) (upper: Z.t) (target: alp t) (default_if_fail: Z.t) (get_bit_from_range: Z.t -> int option) = 
-  let selected_bits = limit_to_bit_range lower upper target.base in
+  let selected_bits = limit_to_bit_range  target.base lower upper in
   let bt_not_shifted = get_bit_from_range selected_bits in 
   match bt_not_shifted with 
   | None -> default_if_fail
@@ -719,7 +719,7 @@ else
   comp_range c2bound c1bound (if same_target_as_lower_bound then c2 else c1)
 
 
-let compute_L (c1: alp t) (c2: alp t) capL1 capL2 = compute_bound_generic c1 c2 capL1 capL2 comp_range_L false
+let compute_L (c1: alp t) (c2: alp t) capL1 capL2 = print_assoc [("capL1 computeL", capL1);("capL2 computeL", capL2 )];compute_bound_generic c1 c2 capL1 capL2 comp_range_L false
     
 
 let compute_U (c1: alp t) (c2: alp t) capU1 capU2 = compute_bound_generic c1 c2 capU1 capU2 comp_range_U true
@@ -754,6 +754,7 @@ let compute_bsn_logand (c1: alp t) (c2:alp t) =
   let (cap_L1,cap_U1) = compute_capL_capU c1 in 
   let (cap_L2,cap_U2) = compute_capL_capU c2 in
   let (capL, capU) = (compute_L c1 c2 cap_L1 cap_L2,compute_U c1 c2 cap_U1 cap_U2) in
+  print_assoc [("cap_L1",cap_L1);("cap_U1",cap_U1);("cap_L2",cap_L2);("cap_U2",cap_U2);("capL",capL);("capU",capU)];
   if Z.leq capL capU then
     let capU' = compute_U' c1 c2 cap_U1 cap_U2 capU in 
     let m = create_mask capL capU' in

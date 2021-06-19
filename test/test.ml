@@ -477,9 +477,9 @@ let test_canon_casec _ =
    "intersection_regression_test8" >:: intersection_regression_test8;
    "intersection_regression_test9" >:: intersection_regression_test9;
    "left_shift_regression_test3" >:: left_shift_regression_test3;
-   (*test_and;*)
+    test_and;
    "and_regression_test" >:: and_regression_test;
-  (* "or_regression_test" >:: or_regression_test;*)
+    "or_regression_test" >:: or_regression_test;
    (*test_or;*)
    test_neg
   ]
