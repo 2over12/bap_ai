@@ -515,11 +515,11 @@ let bin_op f (c1: canon t) (c2: canon t) = if is_bottom c1 || is_bottom c2 then 
 
 
 let add = let add' c1 c2 =
-  let b = Z.erem (Z.add c1.base c2.base) (comp_size c1) in 
+  let b =Z.add c1.base c2.base in 
     if Z.equal c1.card Z.one && Z.equal c2.card Z.one then create ~width:c1.width ~step:Z.zero ~card:Z.one b
     else
       let s = Z.gcd c1.step c2.step in 
-      let n = Z.fdiv (Z.sub (Z.add (compute_last_val c1) (compute_last_val c2)) b) s |> Z.succ in
+      let n = Z.fdiv (Z.sub (Z.add (compute_last_val_unwrapped c1) (compute_last_val_unwrapped c2)) b) s |> Z.succ in
       if (Z.lt n Z.zero) then print_endline ("addition failed on: " ^ (sexp_of_t c1 |> Sexp.to_string) ^ " " ^ (sexp_of_t c2 |> Sexp.to_string) ^"last_val_c1: " ^ (compute_last_val c1 |> Z.to_string) ^"lastvalc2: " ^(compute_last_val c2 |> Z.to_string));
       assert (Z.geq n Z.zero);
       create ~width:c1.width ~step:s ~card:n b
@@ -925,12 +925,15 @@ else
 
   (*upper is exclusive*)
   let limit_to_range (c: canon t) ~is_signed ~lower:(l: Z.t) ~upper:(u: Z.t) = 
-    let inclusive_upper = Z.pred u in
-    let bottom_bound = Z.max l (min_from_width ~is_signed:is_signed ~width:c.width) in 
-    let top_value = Z.min inclusive_upper (max_from_width ~width:c.width ~is_signed:is_signed) in
-    let n =  (Z.sub top_value bottom_bound) in
-    assert (Z.geq n Z.zero);
-    intersection (create ~width:c.width ~card:n ~step:Z.one bottom_bound) c
+    if Z.leq u l then 
+      bottom ~width:c.width
+    else
+      let inclusive_upper = Z.pred u in
+      let bottom_bound = Z.max l (min_from_width ~is_signed:is_signed ~width:c.width) in 
+      let top_value = Z.min inclusive_upper (max_from_width ~width:c.width ~is_signed:is_signed) in
+      let n =  (Z.sub top_value bottom_bound) in
+      assert (Z.geq n Z.zero);
+      intersection (create ~width:c.width ~card:n ~step:Z.one bottom_bound) c
 
 
 
@@ -956,11 +959,11 @@ else
 
   let limit_gt_unsigned = limit_gt_with_modifier ~is_signed:false ~modifier:Z.succ
 
-  let limit_gte_unsigned = limit_lt_with_modifier ~is_signed:false ~modifier:(fun x -> x)
+  let limit_gte_unsigned = limit_gt_with_modifier ~is_signed:false ~modifier:(fun x -> x)
 
-  let limit_gt_signed = limit_lt_with_modifier ~is_signed:true ~modifier:Z.succ
+  let limit_gt_signed = limit_gt_with_modifier ~is_signed:true ~modifier:Z.succ
 
-  let limit_gte_signed = limit_lt_with_modifier ~is_signed:true ~modifier:(fun x -> x)
+  let limit_gte_signed = limit_gt_with_modifier ~is_signed:true ~modifier:(fun x -> x)
 
 
   let unop_on_alps (alp_splitter: canon t -> alp t list) (c: canon t) ~f:(f:alp t -> canon t)= let alps = alp_splitter c in List.map ~f:f alps |> List.reduce ~f:union |> Option.value ~default:(bottom ~width:c.width)
@@ -1051,23 +1054,27 @@ let shift_right_fill1 (c: canon t) (by: canon t) =
   let one = (abstract_single_value ~width:c.width Z.one) in 
   let by_1_bits = sub (left_shift one  by) one in
   print_endline ("by_1_bits" ^(sexp_of_t by_1_bits |> Sexp.to_string));
-  let shift_top_bit_by_maybe = limit_gte_unsigned (sub (abstract_single_value ~width:c.width (Z.of_int c.width)) by) (abstract_single_value ~width:c.width Z.zero) in 
+  let shift_top_bit_by_maybe = limit_gt_signed (sub (abstract_single_value ~width:c.width (Z.of_int c.width)) by) (abstract_single_value ~width:c.width Z.zero) in 
+  print_endline ("shift_top_bit_by_maybe" ^(sexp_of_t shift_top_bit_by_maybe |> Sexp.to_string));
   let shift_top_bit_by = if is_bottom shift_top_bit_by_maybe then (abstract_single_value ~width:c.width Z.zero) else shift_top_bit_by_maybe in 
   let or_mask = left_shift by_1_bits shift_top_bit_by in
   logor or_mask (right_shift_unsigned c by)
 
 let shift_right_fill (fill: canon t) (c: canon t) (by: canon t) = 
+  
     assert (Int.(=) fill.width 1);
     print_endline "going";
-    
-    let fill1 = shift_right_fill1 c by in
-    let fill0 = right_shift_unsigned c by in
-    if is_true fill then
-      fill1
-    else if is_false  fill then
-      fill0
-    else
-      union fill1 fill0   
+    if is_bottom c || is_bottom by then
+      bottom ~width:c.width
+    else  
+      let fill1 = shift_right_fill1 c by in
+      let fill0 = right_shift_unsigned c by in
+      if is_true fill then
+        fill1
+      else if is_false  fill then
+        fill0
+      else
+        union fill1 fill0   
 
 let shift_left_fill (fill: canon t) (c: canon t) (by: canon t) = 
   assert (Int.(=) fill.width 1);
