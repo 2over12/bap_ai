@@ -429,6 +429,8 @@ let test_canon_casec _ =
     let b = create_clp clp2  in 
     print_endline (print_clp a);
     print_endline (print_clp b);
+    "concrete_set_a" ^ print_set  (CircularLinearProgression.unsigned_concretize a) |> print_endline ;
+    "concrete_set_b" ^ print_set  (CircularLinearProgression.unsigned_concretize b) |> print_endline ;
     "concrete_set" ^ print_set  (concrete_op a b) |> print_endline ;
     let res = abstract_op a b in 
     assert_equal ~printer:print_clp (create_clp expected) res
@@ -480,9 +482,21 @@ let test_canon_casec _ =
       let compute_gt clp1 clp2 =
         let c1_vals = CircularLinearProgression.signed_concretize clp1 in
         let c2_vals = CircularLinearProgression.signed_concretize clp2 in 
-        let max_c2 = CircularLinearProgression.Z.Set.max_elt_exn c2_vals in
-        CircularLinearProgression.Z.Set.filter ~f:(fun e -> Z.geq e max_c2) c1_vals
+        let min_c2 = CircularLinearProgression.Z.Set.min_elt_exn c2_vals in (*there exist a case where c1 is greater if it is greater than the min of c2*)
+        CircularLinearProgression.Z.Set.filter ~f:(fun e -> Z.gt e min_c2) c1_vals
 
+    let compute_lt_unsigned clp1 clp2 =
+      let c1_vals = CircularLinearProgression.unsigned_concretize clp1 in
+      let c2_vals = CircularLinearProgression.unsigned_concretize clp2 in 
+      let max_el = CircularLinearProgression.Z.Set.max_elt_exn c2_vals in
+      CircularLinearProgression.Z.Set.filter ~f:(fun e -> Z.lt e max_el) c1_vals
+
+
+    let compute_gte_unsigned clp1 clp2  = 
+    let c1_vals = CircularLinearProgression.unsigned_concretize clp1 in
+    let c2_vals = CircularLinearProgression.unsigned_concretize clp2 in 
+    let min_c2 = CircularLinearProgression.Z.Set.min_elt_exn c2_vals in
+    CircularLinearProgression.Z.Set.filter ~f:(fun e -> Z.geq e min_c2) c1_vals
     let test_regression_limit_gt_signed _ = regression_test ~abstract_op: CircularLinearProgression.limit_gte_signed ~concrete_op:compute_gt (6,5,0,1) (6,0,0,1) (6,5,0,1)
 
   
@@ -501,8 +515,41 @@ let test_canon_casec _ =
     let add_regression3 _ = regression_test ~abstract_op: CircularLinearProgression.add ~concrete_op:compute_adds (11,0,1,2035) (11,14,0,1) (11,14,1,2035)
 
 
-    let suite = 
-  "Test CLPs" >::: [
+(*
+    ((base 33)(step 0)(card 1)(width 7)), ((base 79)(step 0)(card 1)(width 7)))
+*)
+
+  let regression_test_shiftr_fill1_t3 _ = regression_test ~abstract_op:CircularLinearProgression.shift_right_fill1 ~concrete_op:compute_right_shifts_fill1 (7,33,0,1) (7,79,0,1) (7,127,0,1)
+  
+
+(*TODO adress massive loss in precision*) 
+ let regression_test_shiftr_fill1_t4 _ = regression_test ~abstract_op:CircularLinearProgression.shift_right_fill1 ~concrete_op:compute_right_shifts_fill1 (4,12,0,1) (4,1,2,2) (4,1,1,15)
+  
+ let regression_test_shiftr_fill1_t5 _ = regression_test ~abstract_op:CircularLinearProgression.shift_right_fill1 ~concrete_op:compute_right_shifts_fill1 (9,291,0,1) (9,502,28,38) (9,456,55,2)
+
+  let regression_test_gt0 _ = regression_test ~abstract_op: CircularLinearProgression.limit_gt_signed ~concrete_op:compute_gt (7,56,0,1) (7,0,0,1) (7,56,0,1)
+
+
+  let regression_test_lt_unsigned _ = regression_test ~abstract_op: CircularLinearProgression.limit_lt_unsigned ~concrete_op:compute_lt_unsigned (7,79,0,1) (7,7,0,1) (7,0,0,0)
+
+  let regression_test_lt_unsigned2 _ = regression_test ~abstract_op: CircularLinearProgression.limit_lt_unsigned ~concrete_op:compute_lt_unsigned (6,1,0,1) (6,6,0,1) (6,1,0,1)
+
+
+  let regression_test_lt_unsigned3 _ = regression_test ~abstract_op: CircularLinearProgression.limit_lt_unsigned ~concrete_op:compute_lt_unsigned (4,1,2,2) (4,4,0,1) (4,1,2,2)
+
+
+  let left_shift_regression4 _ = regression_test ~abstract_op:CircularLinearProgression.left_shift ~concrete_op:compute_left_shifts (4,1,0,1) (4,1,2,2) (4,2,2,4)
+
+  let left_shift_for_rightshiftfill15_reg _ = regression_test ~abstract_op:(fun x y -> CircularLinearProgression.sub (CircularLinearProgression.left_shift x y) (CircularLinearProgression.abstract_single_value ~width:9 Z.one)) ~concrete_op:compute_left_shifts (9,1,0,1) (9,502,28,38) (9,3,508,2)
+
+
+  let test_gte_regression _ = regression_test ~abstract_op: CircularLinearProgression.limit_gte_unsigned ~concrete_op:compute_gte_unsigned (6,1,0,1) (6,6,0,1) (6,0,0,0)
+
+  let test_shiftr_fill1_regression_simple _ = regression_test ~abstract_op:CircularLinearProgression.shift_right_fill1 ~concrete_op:(compute_right_shifts_fill1) (1,0,0,1) (1,1,0,1) (1,1,0,1)
+
+  let suite = 
+
+      "Test CLPs" >::: [
     
     "test_canon_casea" >:: test_canon_casea;
     "test_canon_caseb" >:: test_canon_caseb;
@@ -569,6 +616,17 @@ let test_canon_casec _ =
    "add_regression" >:: add_regression;
    "add_regression2" >:: add_regression2;
    "add_regression3" >:: add_regression3;
+   "regression_test_shiftr_fill1_t3" >:: regression_test_shiftr_fill1_t3;
+   "regression_test_gt0" >:: regression_test_gt0;
+   "regression_test_lt_unsigned" >:: regression_test_lt_unsigned;
+   "regression_test_lt_unsigned2">:: regression_test_lt_unsigned2;
+   "regression_test_lt_unsigned3" >:: regression_test_lt_unsigned3;
+   "regression_test_shiftr_fill1_t4" >:: regression_test_shiftr_fill1_t4;
+   "left_shift_regression4" >:: left_shift_regression4;
+   "regression_test_shiftr_fill1_t5" >:: regression_test_shiftr_fill1_t5;
+   "left_shift_for_rightshiftfill15_reg" >:: left_shift_for_rightshiftfill15_reg;
+   "test_gte_regression" >:: test_gte_regression;
+   "test_shiftr_fill1_regression_simple" >:: test_shiftr_fill1_regression_simple
   ]
 
 let () =

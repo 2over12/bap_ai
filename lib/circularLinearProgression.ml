@@ -453,7 +453,10 @@ let unsigned_concretize (c:'a t) = (concretize compute_index_value) c
 let signed_concretize (c:'a t) = (concretize compute_signed_index_value) c
 
 let print_values = List.iteri ~f:(fun i it -> print_endline ("item " ^ Int.to_string i ^ ": " ^ (Z.to_string it)))
-let intersection (c1: canon t) (c2: canon t) = if is_bottom c1 || is_bottom c2 then bottom ~width:c1.width else
+let intersection (c1: canon t) (c2: canon t) = 
+  "intersection c1" ^ print_clp c1 |> print_endline;
+  "intersection c2" ^ print_clp c2 |> print_endline;
+  if is_bottom c1 || is_bottom c2 then bottom ~width:c1.width else
   let sz =  (comp_size c1) in 
   let (d,s',_) = Z.gcdext c1.step sz in 
   let (e,t,_) = Z.gcdext c2.step d in
@@ -501,7 +504,7 @@ let subset_of (c1: canon t) (c2: canon t) =
     let sz = comp_size c1 in 
     let (d,s,_) = Z.gcdext c2.step sz in 
     let cap_J = create ~width:(Z.log2 (Z.div sz d)) ~card:c1.card ~step:(Z.div (Z.mul s c1.step) d) (Z.div (Z.mul s (Z.sub c1.base c2.base)) d) in
-    let j_1 = max_u cap_J in 
+    let j_1 = max_u_value cap_J in 
     (Z.divisible (Z.sub c1.base c2.base) d) && Z.divisible c1.step d && not (Z.geq j_1 c2.card)
     )
 
@@ -920,27 +923,34 @@ else
   let lte_unsigned = generic_lte ~f:less_than_unsigned
   let lte_signed = generic_lte ~f:less_than_signed
 *)
-  let max_from_width ~width ~is_signed = let sz =  comp_size_from_width ~width:width (if is_signed then (-1) else 0) in Z.pred sz
-  let min_from_width ~width ~is_signed = if is_signed then Z.zero else (comp_size_from_width ~width:width (-1) |> Z.neg)
+  let max_from_width ~width ~is_signed = let sz =  comp_size_from_width ~width:width (if is_signed then (-1) else 0) in sz
+  let min_from_width ~width ~is_signed = if not is_signed then Z.zero else (comp_size_from_width ~width:width (-1) |> Z.neg)
 
   (*upper is exclusive*)
   let limit_to_range (c: canon t) ~is_signed ~lower:(l: Z.t) ~upper:(u: Z.t) = 
+    print_endline (Z.to_string l);
+    print_endline (Z.to_string u);
     if Z.leq u l then 
       bottom ~width:c.width
     else
-      let inclusive_upper = Z.pred u in
+      let inclusive_upper = u in
       let bottom_bound = Z.max l (min_from_width ~is_signed:is_signed ~width:c.width) in 
       let top_value = Z.min inclusive_upper (max_from_width ~width:c.width ~is_signed:is_signed) in
       let n =  (Z.sub top_value bottom_bound) in
+      let bound_clp = (create ~width:c.width ~card:n ~step:Z.one bottom_bound) in 
       assert (Z.geq n Z.zero);
-      intersection (create ~width:c.width ~card:n ~step:Z.one bottom_bound) c
+      print_endline  ("bound_clp" ^ (sexp_of_t bound_clp |> Sexp.to_string));
+      print_endline (sexp_of_t c |> Sexp.to_string);
+      intersection  bound_clp c
 
 
 
 
 
   let limit_lt_with_modifier(c1: canon t) (c2: canon t) ~is_signed ~modifier = 
-    let mu = if is_signed then max_s c2 else max_u c2 in 
+    let mu = if is_signed then max_s_value c2 else max_u_value c2 in 
+    "c2:" ^ (sexp_of_t c2 |> Sexp.to_string) |> print_endline;
+    "mu:" ^ Z.to_string mu |> print_endline;
     limit_to_range c1 ~lower:(min_from_width ~width:c1.width ~is_signed:is_signed) ~upper:(modifier mu) ~is_signed:is_signed
 
   let limit_lte_unsigned = limit_lt_with_modifier ~is_signed:false ~modifier:Z.succ
@@ -953,7 +963,9 @@ else
 
 
   let limit_gt_with_modifier (c1: canon t) (c2: canon t)  ~is_signed ~modifier = 
-    let mu =if is_signed then min_s c2 else min_u c2 in
+    print_clp c2 |> print_endline; 
+    let mu =if is_signed then max_s_value c2 else min_u_value c2 in
+    "mu: " ^ (Z.to_string mu)  |> print_endline ;
     limit_to_range c1 ~lower:(modifier mu) ~upper:(max_from_width ~width:c1.width ~is_signed:is_signed) ~is_signed:is_signed
 
 
@@ -1024,8 +1036,8 @@ else
 
 
   let msb (c: canon t) =
-    let max_val = max_u c in
-    let min_val = min_u c in
+    let max_val = max_u_value c in
+    let min_val = min_u_value c in
     let sz = comp_size_with_modifier c (-1) in 
     let can_have_1 = Z.geq max_val sz in
     let can_have_0 = Z.lt min_val sz in 
@@ -1049,16 +1061,35 @@ else
   abstract_single_value Z.zero ~width:1
 
 
+let right_shift_fill1_greater_width (c: canon t) (by: canon t) =
+  if is_bottom by then 
+      bottom ~width:c.width
+  else
+      (abstract_single_value ~width:c.width (Z.pred (comp_size c)))
+
+let right_shift_fill1_less_width (c: canon t) (by: canon t) = 
+  if is_bottom by then 
+    bottom ~width:c.width
+  else 
+    let one = (abstract_single_value ~width:c.width Z.one) in 
+    let by_1_bits = sub (left_shift one  by) one in
+   (* print_endline ("by_1_bits" ^(sexp_of_t by_1_bits |> Sexp.to_string));*)
+    let abs_width = (abstract_single_value ~width:c.width (Z.of_int c.width)) in 
+    let diff_from_width = (sub abs_width by) in 
+    let or_mask = left_shift by_1_bits diff_from_width in
+    logor or_mask (right_shift_unsigned c by)
+
 
 let shift_right_fill1 (c: canon t) (by: canon t) = 
-  let one = (abstract_single_value ~width:c.width Z.one) in 
-  let by_1_bits = sub (left_shift one  by) one in
-  print_endline ("by_1_bits" ^(sexp_of_t by_1_bits |> Sexp.to_string));
-  let shift_top_bit_by_maybe = limit_gt_signed (sub (abstract_single_value ~width:c.width (Z.of_int c.width)) by) (abstract_single_value ~width:c.width Z.zero) in 
-  print_endline ("shift_top_bit_by_maybe" ^(sexp_of_t shift_top_bit_by_maybe |> Sexp.to_string));
-  let shift_top_bit_by = if is_bottom shift_top_bit_by_maybe then (abstract_single_value ~width:c.width Z.zero) else shift_top_bit_by_maybe in 
-  let or_mask = left_shift by_1_bits shift_top_bit_by in
-  logor or_mask (right_shift_unsigned c by)
+  let abs_width = (abstract_single_value ~width:c.width (Z.of_int c.width)) in 
+  let shiftable_width = limit_lt_unsigned by abs_width in
+  let unshiftable_width = limit_gte_unsigned by abs_width in 
+  "unshiftable_width" ^ print_clp unshiftable_width |> print_endline;
+  let mval = right_shift_fill1_greater_width c unshiftable_width in 
+  "mval" ^ print_clp mval |> print_endline;
+  let shiftable_vals = right_shift_fill1_less_width c shiftable_width in 
+  union mval shiftable_vals
+
 
 let shift_right_fill (fill: canon t) (c: canon t) (by: canon t) = 
   
