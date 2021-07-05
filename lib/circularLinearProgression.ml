@@ -1091,22 +1091,33 @@ let shift_right_fill1 (c: canon t) (by: canon t) =
   union mval shiftable_vals
 
 
-let shift_right_fill (fill: canon t) (c: canon t) (by: canon t) = 
-  
-    assert (Int.(=) fill.width 1);
-    print_endline "going";
-    if is_bottom c || is_bottom by then
-      bottom ~width:c.width
-    else  
-      let fill1 = shift_right_fill1 c by in
-      let fill0 = right_shift_unsigned c by in
-      if is_true fill then
-        fill1
-      else if is_false  fill then
-        fill0
-      else
-        union fill1 fill0   
 
-let shift_left_fill (fill: canon t) (c: canon t) (by: canon t) = 
+let shift_x_fill ~fill_1 ~fill_0 (fill: canon t ) (c: canon t) (by: canon t) =
   assert (Int.(=) fill.width 1);
-  c
+  if is_bottom c || is_bottom by then
+    bottom ~width:c.width
+  else 
+    let fill1 = fill_1 c by in
+    let fill0 = fill_0 c by in
+  if is_true fill then
+    fill1
+  else if is_false  fill then
+    fill0
+  else
+    union fill1 fill0   
+
+
+let left_shift_fill1 (c: canon t) (by: canon t) = 
+  let one = (abstract_single_value ~width:c.width Z.one) in 
+  let by_1_bits = sub (left_shift one  by) one in
+  "by_1_bits" ^ print_clp by_1_bits |> print_endline;
+  let shifted_with_no_1 = (left_shift c by) in 
+  "shifted_with_no_1" ^ print_clp shifted_with_no_1 |> print_endline;
+  let logor_res = logor shifted_with_no_1 by_1_bits in
+  "logor_rs " ^ print_clp logor_res |> print_endline;
+  logor_res
+
+let shift_right_fill = shift_x_fill ~fill_1:shift_right_fill1 ~fill_0:right_shift_unsigned
+  
+
+let shift_left_fill  = shift_x_fill ~fill_1:left_shift_fill1 ~fill_0:left_shift

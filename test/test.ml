@@ -188,6 +188,9 @@ let test_canon_casec _ =
   let shiftr_fill0_func: CircularLinearProgression.canon CircularLinearProgression.t -> CircularLinearProgression.canon CircularLinearProgression.t -> CircularLinearProgression.canon CircularLinearProgression.t = ((CircularLinearProgression.shift_right_fill (CircularLinearProgression.abstract_single_value Z.zero ~width:1)))
 
   let shiftr_fill1_func: CircularLinearProgression.canon CircularLinearProgression.t -> CircularLinearProgression.canon CircularLinearProgression.t -> CircularLinearProgression.canon CircularLinearProgression.t = ((CircularLinearProgression.shift_right_fill (CircularLinearProgression.abstract_single_value Z.one ~width:1)))
+  
+  let shiftl_fill1_func = ((CircularLinearProgression.shift_left_fill (CircularLinearProgression.abstract_single_value Z.one ~width:1)))
+  
   let z_illogical_shift ~width:(width:int) (to_shift: Z.t) (by: int) = 
     let it = (Z.shift_right_trunc to_shift by) in
     let by_1s = (Z.pred (Z.shift_left Z.one by) ) in
@@ -205,11 +208,29 @@ let test_canon_casec _ =
     collect_pairwise ~f:(fun x y -> Z.shift_right_trunc x (Z.to_int y)) v1 v2)) ~count:200)
 
 
-    let compute_right_shifts_fill1 = (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 c1 _c2 -> 
-      collect_pairwise ~f:(fun x y -> z_illogical_shift ~width:c1.width  x (Z.to_int y)) v1 v2))
+
+    let compute_shifts ~shifter = (apply_binary_operator ~concretization_function:CircularLinearProgression.unsigned_concretize ~merge_values:(fun v1 v2 c1 _c2 -> 
+      collect_pairwise ~f:(fun x y -> shifter ~width:c1.width  x (Z.to_int y)) v1 v2))
+
+    let compute_right_shifts_fill1 = compute_shifts ~shifter:z_illogical_shift
+
+
+    let illogical_left ~width:(width:int) (to_shift: Z.t) (by: int) = 
+      let sz = (CircularLinearProgression.comp_size_from_width ~width:width 0) in
+      let it = Z.erem (Z.shift_left to_shift by) sz  in
+      "itttt" ^ Z.to_string it |> print_endline;
+      let by_1s = Z.erem (Z.pred (Z.shift_left Z.one by) ) sz in
+      "by_1s" ^ Z.to_string by_1s |> print_endline;
+      Z.logor by_1s it
+  
+
+    let compute_left_shifts_fill1 = compute_shifts ~shifter:illogical_left
     let  test_shiftr_fill1 = QCheck_ounit.to_ounit2_test (test_binary_operator_is_over_approx  ~name:"test_shiftr_fill1" shiftr_fill1_func CircularLinearProgression.unsigned_concretize 
     compute_right_shifts_fill1 ~count:200)
   
+    let test_shiftl_fill1 = QCheck_ounit.to_ounit2_test (test_binary_operator_is_over_approx  ~name:"test_shiftl_fill1" shiftl_fill1_func CircularLinearProgression.unsigned_concretize 
+    compute_left_shifts_fill1 ~count:200)
+
 
   let shiftr_fill0_regression _ =
     let to_shift =  CircularLinearProgression.create ~width:3 ~step:Z.zero ~card:(Z.of_int 1) Z.one in
@@ -282,9 +303,24 @@ let test_canon_casec _ =
     let by = CircularLinearProgression.create ~width:3 ~step:(Z.of_int 1) ~card:(Z.of_int 2) Z.zero in
     let res = CircularLinearProgression.shift_right_fill1 to_shift by in 
     assert_equal ~printer:(clp_printer) (CircularLinearProgression.create ~width:3 ~step:Z.zero ~card:(Z.of_int 0) Z.zero) res 
+    
     let test_illogical_shift _ =
        let res = z_illogical_shift ~width:11 (Z.of_int 0) 14 in
         assert_equal ~printer:Z.to_string (Z.of_int 2047) res
+
+    
+    let test_illogical_left_shift2 _ =  
+      let res = z_illogical_shift ~width:6 (Z.of_int 49) 5 in
+      assert_equal ~printer:Z.to_string (Z.of_int 63) res
+
+      let test_illogical_left_shift3 _ =  
+        let res = z_illogical_shift ~width:6 (Z.of_int 49) 9 in
+        assert_equal ~printer:Z.to_string (Z.of_int 63) res
+  
+
+    let test_illogical_left_shift _ =
+      let res = illogical_left ~width:6 (Z.of_int 49) 1 in
+        assert_equal ~printer:Z.to_string (Z.of_int 35) res
 
 
     let test_compute_capL_capU _ = 
@@ -547,7 +583,19 @@ let test_canon_casec _ =
 
   let test_shiftr_fill1_regression_simple _ = regression_test ~abstract_op:CircularLinearProgression.shift_right_fill1 ~concrete_op:(compute_right_shifts_fill1) (1,0,0,1) (1,1,0,1) (1,1,0,1)
 
-  let suite = 
+  
+
+  let shiftl_fill1_regression_singleton _ = regression_test ~abstract_op:CircularLinearProgression.left_shift_fill1 ~concrete_op:(compute_left_shifts_fill1) (6,49,0,1) (6,1,0,1) (6,35,0,1)
+
+
+  let shiftl_fill1_regression_2 _ = regression_test ~abstract_op:CircularLinearProgression.left_shift_fill1 ~concrete_op:(compute_left_shifts_fill1) (6,49,0,1) (6,1,4,3) (6,1,2,32)
+
+
+  let test_compute_set_of_left_shifts _ = 
+    let res = compute_left_shifts_fill1 (create_clp (6,49,0,1)) (create_clp  (6,1,4,3)) in
+      assert_equal ~printer:print_set ~cmp:(CircularLinearProgression.Z.Set.equal) res (CircularLinearProgression.Z.Set.of_list [Z.of_int 35;Z.of_int 63])
+  
+      let suite = 
 
       "Test CLPs" >::: [
     
@@ -626,7 +674,15 @@ let test_canon_casec _ =
    "regression_test_shiftr_fill1_t5" >:: regression_test_shiftr_fill1_t5;
    "left_shift_for_rightshiftfill15_reg" >:: left_shift_for_rightshiftfill15_reg;
    "test_gte_regression" >:: test_gte_regression;
-   "test_shiftr_fill1_regression_simple" >:: test_shiftr_fill1_regression_simple
+   "test_shiftr_fill1_regression_simple" >:: test_shiftr_fill1_regression_simple;
+    test_shiftl_fill1;
+    "shiftl_fill1_regression_singleton" >:: shiftl_fill1_regression_singleton;
+    "test_illogical_left_shift" >:: test_illogical_left_shift;
+    "shiftl_fill1_regression_2" >:: shiftl_fill1_regression_2;
+    "test_illogical_left_shift2" >:: test_illogical_left_shift2;
+    "test_illogical_left_shift3" >:: test_illogical_left_shift3;
+    "test_compute_set_of_left_shifts" >:: test_compute_set_of_left_shifts;
+    
   ]
 
 let () =
