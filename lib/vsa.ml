@@ -693,3 +693,14 @@ end)
 
   
 end 
+
+let () =
+  Theory.declare ~name:"vsa_denotation" 
+  (
+   Theory.instance ()
+    >>= Theory.require >>| fun (module BaseM): Theory.core ->
+      (module struct 
+        include BaseM 
+        include Denotation
+    end)
+  )
