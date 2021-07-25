@@ -684,11 +684,29 @@ in (Var.Map.map imms ~f:(fun (t,f) -> denote_def' t,  denote_def' f) , denote_de
       let empty_denotation =  (Theory.Effect.empty (Theory.Effect.Sort.data "")) in 
       let post_cond_denot = KB.Value.put postcondition empty_denotation post_cond in 
       let add_tid_denot = KB.Value.put tid_slot post_cond_denot tid in
-      KB.return post_cond_denot
+      KB.return add_tid_denot
   in
     tid_update
 
-
+  let seq (eff1: 'a Theory.eff) (eff2: 'a Theory.eff) =
+  let tid_update = 
+    let* tid = fresh in 
+    let* pred = KB.collect precondition tid in 
+    let* eff1_v = eff1 in 
+    let* eff2_v = eff2 in 
+    let eff1_tid = KB.Value.get tid_slot eff1_v in 
+    let* () = KB.provide precondition eff1_tid pred in
+    let eff1_post_cond = KB.Value.get postcondition eff1_v in 
+    let eff2_tid = KB.Value.get tid_slot eff2_v in
+    let* () = KB.provide precondition eff2_tid eff1_post_cond in 
+    let eff2_post_cond = KB.Value.get postcondition eff2_v in 
+    let empty_denotation =  (Theory.Effect.empty (Theory.Effect.sort eff1_v)) in 
+    let post_cond_denot = KB.Value.put postcondition empty_denotation eff2_post_cond in 
+    let add_tid_denot = KB.Value.put tid_slot post_cond_denot tid in
+      KB.return add_tid_denot
+  in 
+    tid_update
+  
 end 
 
 let () =
