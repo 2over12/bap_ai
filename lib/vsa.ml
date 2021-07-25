@@ -4,13 +4,8 @@ open Bap_core_theory
 open Bap_knowledge
 
 open Knowledge.Syntax
-
+open Knowledge.Let
 module VsaDom = ProductDomain.BottomReduction(ImmEnv.BooleanImmediates)(ValueStore.AbstractStore)
-
-let is_bool (v: Var.t) = Var.typ v |> function 
-  | Type.Imm x -> Int.equal x 1 
-  | _ -> false
-
 
   (* goal here is to return both an overapproximation of true and overapproximation of false... i think this should be calculable
   any non boolean thing should be pulled from normal denotation. Could sparse up the repr by only considering variables that will be needed later, some sort of backwards slicing on bools.
@@ -34,92 +29,6 @@ let is_bool (v: Var.t) = Var.typ v |> function
     *)
 
 module BoolDom = ProductDomain.MakeProduct(ValueStore.AbstractStore)(ValueStore.AbstractStore)
-
-
-
-
-
-
-let binop_to_comp  (comp: binop) = match comp with 
-  | EQ -> `EQ
-  | NEQ -> `NEQ
-  | LT -> `LT
-  | LE -> `LE
-  | SLT -> `SLT
-  | SLE -> `SLE
-  | _ -> raise (Failure "not a comparison operator")
-
-
-let neg_of_comp = function
-  | `EQ -> `NEQ
-  | `NEQ -> `EQ
-  | `LT -> `GE
-  | `LE -> `GT
-  | `SLT -> `SGE
-  | `SLE -> `SGT
-  | `GE -> `LT
-  | `GT -> `LE
-  | `SGE -> `SLT 
-  | `SGT -> `SLE
-
-
-  let get_comp_fun = function 
-    | `EQ -> CircularLinearProgression.intersection
-    | `NEQ -> raise (Failure "need to implement set difference")
-    | `LT -> CircularLinearProgression.limit_lt_unsigned
-    | `LE -> CircularLinearProgression.limit_lte_unsigned
-    | `SLT -> CircularLinearProgression.limit_lt_signed
-    | `SLE -> CircularLinearProgression.limit_lte_signed
-    | `GE -> CircularLinearProgression.limit_gte_unsigned
-    | `GT -> CircularLinearProgression.limit_gt_unsigned
-    | `SGE -> CircularLinearProgression.limit_gte_signed
-    | `SGT -> CircularLinearProgression.limit_gt_signed
-
-let denote_comp with_op to_limit with_val = let op_fun = ValueStore.ValueSet.pairwise_function_inclusive ~f:(get_comp_fun with_op) in op_fun to_limit with_val
-
-let constrain_var (v: var) (curr_store: ValueStore.AbstractStore.t) with_op (with_val: ValueStore.ValueSet.t) =
-    let v_val = ValueStore.AbstractStore.get curr_store (ValueStore.ALoc.Var v) in 
-   ValueStore.ALoc.Map.set curr_store ~key:(ValueStore.ALoc.Var v) ~data:(denote_comp with_op v_val with_val)
-    
-
-
-let flip_comp = function 
-| `EQ -> `EQ
-| `NEQ -> `NEQ
-| `LT -> `GT
-| `LE -> `GE
-| `SLT -> `SGT
-| `SLE -> `SGE
-| `GE-> `LE
-| `GT -> `LT
-| `SGE -> `SLE
-| `SGT ->  `SLT
-
-
-
-
-let limit_var lv vs with_op (with_val: word) = 
-  constrain_var lv vs with_op (ValueStore.ValueSet.abstract_constant with_val)
-
-
-let limit_two_vars comp lv rv vs =   let constrained_by_left = constrain_var lv vs comp (ValueStore.AbstractStore.get vs (ValueStore.ALoc.Var rv)) in
-let constrained_by_right = constrain_var rv constrained_by_left (flip_comp comp) (ValueStore.AbstractStore.get vs (ValueStore.ALoc.Var rv))
-in constrained_by_right
-
-
-
-let handle_predicate (comp: binop) (lh: exp) (rh: exp) (vs: ValueStore.AbstractStore.t): BoolDom.t =
-  let comp = binop_to_comp comp in   
-  match (lh,rh) with 
-  | (Bil.Var lv, Bil.Var rv) -> (
-  limit_two_vars comp lv rv vs,limit_two_vars (neg_of_comp comp) lv rv vs)
-  | (Bil.Var lv, Bil.Int ri) -> (limit_var lv vs comp ri , limit_var lv vs (neg_of_comp comp) ri)
-  | (Bil.Int li, Bil.Var rv) ->
-    let flipped = flip_comp comp in 
-    
-    (limit_var rv vs flipped li, limit_var rv vs (neg_of_comp flipped) li)
-  | _ -> (vs,vs)
-
 
 module KnownForm = struct
   type connective_op =  
@@ -161,59 +70,132 @@ module KnownForm = struct
   let create_int (w: Theory.word) (width: int) = Some (Atom (Int (Word.create w width)))
 
   let create_var (v: 'a Theory.var) = Some (Atom (Var (Var.reify v)))
+
+  
+  let calculate_atom (a: atom) (pred: VsaDom.t): BoolDom.t = 
+    let (bool_bindings, abstract_store) = pred in 
+    match a with 
+      | Var v -> Var.Map.find bool_bindings v |> Option.value ~default:(ValueStore.AbstractStore.bot, ValueStore.AbstractStore.bot)
+      | Int c -> if Word.equal c (Word.one 1)then (abstract_store, ValueStore.AbstractStore.bot) else (ValueStore.AbstractStore.bot, abstract_store)
+
+
+
+
+
+
+let neg_of_comp = function
+| `EQ -> `NEQ
+| `NEQ -> `EQ
+| `SLT -> `SGE
+| `ULT -> `UGE
+| `SGT -> `SLE
+| `UGT -> `ULE
+| `SGE -> `SLT
+| `UGE -> `ULT
+| `SLE -> `SGT
+| `ULE -> `UGT
+
+let flip_comp = function 
+| `EQ -> `EQ
+| `NEQ -> `NEQ
+| `SLT -> `SGT
+| `ULT -> `UGT
+| `SGT -> `SLT
+| `UGT -> `ULT
+| `SGE -> `SLE
+| `UGE -> `ULE
+| `SLE -> `SGE
+| `ULE -> `UGE
+
+let pred_op_to_internal_rep = 
+  function 
+  | EQ -> `EQ
+  | NEQ -> `NEQ
+  | SLT -> `SLT
+  | ULT -> `ULT
+  | SGT -> `SGT
+  | UGT -> `UGT
+  | SGE -> `SGE
+  | UGE -> `UGE
+
+
+let get_comp_fun = function 
+| `EQ -> CircularLinearProgression.intersection
+| `NEQ -> raise (Failure "need to implement set difference")
+| `SLT -> CircularLinearProgression.limit_lt_signed
+| `ULT ->  CircularLinearProgression.limit_lt_unsigned
+| `SGT -> CircularLinearProgression.limit_gt_signed
+| `UGT -> CircularLinearProgression.limit_gt_unsigned
+| `SGE -> CircularLinearProgression.limit_gte_signed
+| `UGE -> CircularLinearProgression.limit_gte_unsigned
+| `SLE -> CircularLinearProgression.limit_lte_signed
+| `ULE -> CircularLinearProgression.limit_lte_unsigned
+
+
+let denote_comp with_op to_limit with_val = let op_fun = ValueStore.ValueSet.pairwise_function_inclusive ~f:(get_comp_fun with_op) in op_fun to_limit with_val
+
+let constrain_var (v: var) (curr_store: ValueStore.AbstractStore.t) with_op (with_val: ValueStore.ValueSet.t) =
+  let v_val = ValueStore.AbstractStore.get curr_store (ValueStore.ALoc.Var v) in 
+ ValueStore.ALoc.Map.set curr_store ~key:(ValueStore.ALoc.Var v) ~data:(denote_comp with_op v_val with_val)
+  
+
+
+
+
+
+
+
+let limit_var lv vs with_op (with_val: word) = 
+constrain_var lv vs with_op (ValueStore.ValueSet.abstract_constant with_val)
+
+
+let limit_two_vars comp lv rv vs =   let constrained_by_left = constrain_var lv vs comp (ValueStore.AbstractStore.get vs (ValueStore.ALoc.Var rv)) in
+let constrained_by_right = constrain_var rv constrained_by_left (flip_comp comp) (ValueStore.AbstractStore.get vs (ValueStore.ALoc.Var rv))
+in constrained_by_right
+
+    let signed_op  op x y = op (Word.signed x) (Word.signed y)
+    let unsigned_op op x y = op (Word.unsigned x) (Word.unsigned y)
+    let concrete_op_from_pred_op (pred: predicate_op) =
+      match pred with 
+        | EQ -> Word.equal
+        | NEQ -> (fun x y -> Word.equal x y |> not)
+        | SLT -> signed_op Word.(<)
+        | ULT -> unsigned_op Word.(<)
+        | SGT -> signed_op Word.(>)
+        | UGT -> unsigned_op Word.(>)
+        | SGE -> signed_op Word.(>=)
+        | UGE -> unsigned_op Word.(>=)
+
+    let rec compute_known_form (kf: known_exp) (dom: VsaDom.t): BoolDom.t = 
+      let (imms,vs) = dom in 
+        match kf with 
+          | Atom a -> calculate_atom a dom
+          | Connective (op, exp1, exp2) -> compute_connective op exp1 exp2 dom
+          | Predicate (op, exp1, exp2) -> compute_predicate op exp1 exp2 dom
+      and compute_connective (op: connective_op) (exp1: known_exp) (exp2: known_exp) (pred: VsaDom.t): BoolDom.t = 
+        let (exp1_t_approx, exp1_f_approx) = compute_known_form exp1 pred in 
+        let (exp2_t_approx, exp2_f_approx) = compute_known_form exp2 pred in 
+        let exp2_b = compute_known_form exp2 in
+        match op with 
+        | AND -> (ValueStore.AbstractStore.meet exp1_t_approx exp2_t_approx, ValueStore.AbstractStore.join exp2_f_approx exp1_f_approx)
+        | OR -> (ValueStore.AbstractStore.join exp1_t_approx exp2_t_approx, ValueStore.AbstractStore.meet exp1_f_approx exp2_f_approx)
+      and compute_predicate (op: predicate_op) (atom1: atom) (atom2: atom) (dom: VsaDom.t): BoolDom.t =
+        let (imms, abstore) = dom in 
+        let generalized_op = pred_op_to_internal_rep op in
+        match (atom1, atom2) with 
+          | (Var v1,  Var v2) -> (limit_two_vars generalized_op v1 v2 abstore, limit_two_vars(neg_of_comp generalized_op) v1 v2 abstore)
+          | (Var v1, Int const2) -> (limit_var v1 abstore generalized_op const2 , limit_var v1 abstore (neg_of_comp generalized_op) const2)
+          | (Int const1, Var v2) -> let flipped_op = flip_comp generalized_op in 
+          (limit_var v2 abstore flipped_op const1 , limit_var v2 abstore (neg_of_comp flipped_op) const1)
+          | (Int a, Int b) -> 
+              let res = (concrete_op_from_pred_op op) a b in
+                if res then (abstore,abstore) else (ValueStore.AbstractStore.bot, ValueStore.AbstractStore.bot)
+
 end
 
-let rec denote_exp_as_bool (e: Exp.t) (pred: VsaDom.t): BoolDom.t =
-  let (imms,vs) = pred in 
-  match e with 
-    | Bil.Var x -> Option.value  ~default:(ValueStore.AbstractStore.bot, ValueStore.AbstractStore.bot) (Var.Map.find imms x)
-    | Bil.Int x -> if Word.equal (Word.one 1) x then  (vs, ValueStore.AbstractStore.bot) else  (ValueStore.AbstractStore.bot, vs)
-    | Bil.BinOp (op,l,r) -> 
-      (match op with 
-        | AND | OR -> 
-          let (tl, fl) = denote_exp_as_bool l pred in
-          let (tr, fr) = denote_exp_as_bool r pred in 
-            (match op with
-              | AND -> (ValueStore.AbstractStore.meet tl tr,ValueStore.AbstractStore.join fl fr) (* i think the meets should be safe given that all values are computed from pred*)
-              | OR -> (ValueStore.AbstractStore.join tl tr,ValueStore.AbstractStore.meet fl fr)
-              | _ -> raise (Failure "impossible"))
+           
 
-        | EQ | NEQ |LT | LE |SLT |SLE -> handle_predicate op l r vs
-        | _ -> (*welp we are screwed for now so*) (vs,vs))
-    |_ -> (vs,vs)
-            
-let denote_bin_op (op: binop) (s1: ValueStore.ValueSet.t) (s2: ValueStore.ValueSet.t):  ValueStore.ValueSet.t  =
-  let f = match op with 
-      | PLUS -> CircularLinearProgression.add 
-      | MINUS -> CircularLinearProgression.sub
-      | TIMES -> CircularLinearProgression.unsigned_mul 
-      | DIVIDE -> CircularLinearProgression.unsigned_div
-      | SDIVIDE -> CircularLinearProgression.signed_div
-      | MOD -> CircularLinearProgression.unsigned_modulo
-      | SMOD -> CircularLinearProgression.signed_modulo
-      | RSHIFT -> CircularLinearProgression.right_shift_unsigned
-      | ARSHIFT -> CircularLinearProgression.right_shift_signed
-      | AND -> CircularLinearProgression.logand
-      | OR -> CircularLinearProgression.logor
-      | XOR -> CircularLinearProgression.logxor
-      | EQ -> CircularLinearProgression.equality
-      | NEQ -> CircularLinearProgression.not_equal
-      | LT -> CircularLinearProgression.less_than_unsigned
-      | LE -> CircularLinearProgression.lte_unsigned
-      | SLT -> CircularLinearProgression.less_than_signed
-      | SLE -> CircularLinearProgression.lte_signed
-      | LSHIFT -> CircularLinearProgression.left_shift
-    in 
-    ValueStore.ValueSet.pairwise_function_inclusive ~f:f s1 s2
-
-let denote_un_op (op: unop) (s: ValueStore.ValueSet.t): ValueStore.ValueSet.t = let f = match op with 
-  | NEG -> CircularLinearProgression.neg
-  | NOT -> CircularLinearProgression.not_clp
-  in
-    ValueStore.ValueSet.apply_function ~f:f s
-
-
-
+(*
 let exec_cast_on (ctype: cast) (v: ValueStore.ValueSet.t) (target_width: int) = let f = match ctype with 
   | UNSIGNED -> CircularLinearProgression.zero_extend ~width:target_width
   | SIGNED -> CircularLinearProgression.sign_extend ~width:target_width
@@ -240,99 +222,7 @@ let contains_no_recursive_objects (access_list: ValueStore.ALoc.t list) (non_rec
 
 let can_strong_update (fully_accssed: ValueStore.ALoc.t list) (partially_accesed: ValueStore.ALoc.t list) ((_,non_rec_procs): ValueStore.ALocMap.t) = 
   List.is_empty partially_accesed && List.length fully_accssed = 1 && contains_no_heap_objects fully_accssed && contains_no_recursive_objects fully_accssed non_rec_procs
-
-
-  (* TODO handle endianess*)
-let denote_load (mp: ValueStore.ALocMap.t) (pred: ValueStore.AbstractStore.t) (addr_res: ValueStore.ValueSet.t) (_endianess: endian) (sz: Size.all) = 
-  let (f,p) = ValueStore.ALocMap.deref mp addr_res (Size.size_in_bytes sz) in
-    if List.is_empty p then 
-      List.map ~f:(ValueStore.AbstractStore.get pred) f |> List.reduce_exn ~f:ValueStore.ValueSet.join
-    else 
-      ValueStore.ValueSet.top
-    
-let denote_store  (mp: ValueStore.ALocMap.t) (pred: ValueStore.AbstractStore.t) (addr_res: ValueStore.ValueSet.t) (value_res: ValueStore.ValueSet.t) (_endianess: endian) (sz: Size.all) = 
-      let (f,p) =  ValueStore.ALocMap.deref mp addr_res (Size.size_in_bytes sz) in
-      let should_strong = can_strong_update f p mp in 
-      let handled_faccess = List.fold ~init:pred ~f:(fun store aloc  -> let new_data = if should_strong then value_res else 
-          let previous_value = ValueStore.AbstractStore.get pred aloc in ValueStore.ValueSet.join previous_value value_res
-        in ValueStore.ALoc.Map.set store ~key:aloc ~data:new_data
-          ) f in 
-      List.fold ~init:handled_faccess ~f:(fun store aloc -> ValueStore.ALoc.Map.set store ~key:aloc ~data:ValueStore.ValueSet.top) p
-      
-
-
-
-let rec denote_value_exp (first_exp: Exp.t) (vsa_dom: VsaDom.t) (mp: ValueStore.ALocMap.t): ValueStore.ValueSet.t = 
-  let (immenv, pred) = vsa_dom in 
-  match first_exp with 
-   | Int w -> ValueStore.ValueSet.abstract_constant w
-   | Var v -> ValueStore.AbstractStore.get  pred (ValueStore.ALoc.Var v)
-   | Let (v,e1,e2) ->
-    if is_bool v then 
-      let bs = denote_exp_as_bool e1 vsa_dom in 
-        let new_imenv = Var.Map.set immenv ~key:v ~data:bs in denote_value_exp e2 (new_imenv,pred) mp
-    else
-      let new_bindings = ValueStore.ALoc.Map.set pred ~key:(ValueStore.ALoc.Var v) ~data:(denote_value_exp e1 vsa_dom mp) in denote_value_exp e2 (immenv,new_bindings) mp
-   | BinOp (op, e1, e2) -> denote_bin_op op (denote_value_exp e1 vsa_dom mp) (denote_value_exp e2 vsa_dom mp)
-   | UnOp (op, e) -> denote_un_op op (denote_value_exp e vsa_dom mp)
-   | Ite (b, th, el) -> let (tres,fres) = denote_exp_as_bool b vsa_dom in ValueStore.ValueSet.join (denote_value_exp th (immenv,tres) mp)  (denote_value_exp el (immenv,fres) mp)
-   | Cast (cast_ty, width, e) -> let evaluated = denote_value_exp e vsa_dom mp in exec_cast_on cast_ty evaluated width
-   | Unknown _ -> raise (Failure "something failed to lift")
-   | Extract (lower, upper,e) -> let res = denote_value_exp e vsa_dom mp in ValueStore.ValueSet.apply_function ~f:(CircularLinearProgression.extract lower upper) res
-   | Concat (e1,e2) -> let e1 = denote_value_exp e1 vsa_dom mp in let e2 = denote_value_exp e2 vsa_dom mp in ValueStore.ValueSet.pairwise_function_inclusive ~f:CircularLinearProgression.concat e1 e2
-   | Load (_,addr, endianess, sz) -> let evaluted_addr = denote_value_exp addr vsa_dom mp in denote_load mp pred evaluted_addr endianess sz
-   | Store (_mem, _addr, _value, _endianess, _sz) ->  raise (Failure "store is not a value expression")
-
-type evaluated_expr = 
-      | Value of ValueStore.ValueSet.t
-      | NewEnv of ValueStore.AbstractStore.t 
-
-let denote_expr (first_exp: Exp.t) (vsa_dom: VsaDom.t) (mp: ValueStore.ALocMap.t): evaluated_expr = 
-  let (immenv, pred) = vsa_dom in 
-  match first_exp with 
-    | Store  (_mem, addr, value, endianess, sz)  -> let evaluated_addr = denote_value_exp addr vsa_dom mp in let evaluated_value = denote_value_exp value vsa_dom mp in NewEnv (denote_store mp pred evaluated_addr evaluated_value endianess sz)
-    | _ -> Value (denote_value_exp first_exp vsa_dom mp)
-
-let denote_def  (d: Def.t) (pred: VsaDom.t) (mp: ValueStore.ALocMap.t): VsaDom.t = 
-  let assignee  = Def.lhs d in
-  let (imms, vs) = pred in 
-  if is_bool assignee then  
-    (Var.Map.set imms ~key:assignee
-    ~data:(denote_exp_as_bool (Def.rhs d) pred) , vs)
-  else
-  (*if we arent updating a boolean *)
-  let denote_def' (pred : ValueStore.AbstractStore.t): ValueStore.AbstractStore.t = 
-    let res_of_expr = denote_expr (Def.rhs d) (imms,pred) mp in 
-    match res_of_expr with 
-      | Value nval -> ValueStore.ALoc.Map.set pred ~key:(ValueStore.ALoc.Var assignee) ~data:nval
-      | NewEnv updated_store -> updated_store
-in (Var.Map.map imms ~f:(fun (t,f) -> denote_def' t,  denote_def' f) , denote_def' vs)
-
-
-type jmp_results = {successors: tid list; take_jmp: VsaDom.t; dont_take: VsaDom.t}
-
-let apply_guard (pred: VsaDom.t) (value) = raise (Failure "not implemented")
-
-let denote_jmp (jmp : Jmp.t) (pred: VsaDom.t): jmp_results = raise (Failure "not implemented")
-let denote_block (blk: Blk.t) (pred: VsaDom.t) (mp: ValueStore.ALocMap.t): VsaDom.t = 
-  let phi_nodes = Term.enum phi_t blk in 
-  assert (Seq.is_empty phi_nodes);
-
-  let defs = Term.enum def_t blk in 
-
-
-  let before_jumps = Seq.fold ~init:pred ~f:(fun new_pred df ->
-      
-      denote_def df new_pred mp ) defs in
-
-  let jmps = Term.enum jmp_t blk in 
-    raise (Failure "not implemented") 
-
-
-
-(*TODO hmm didnt require GT*)
-
-
+*)
 module CPOToBAPDom(X: AbstractDomain.CPO)(Y: sig 
   val name: string
 end) = struct 
@@ -380,7 +270,11 @@ module VsaKBDom = CPOToBAPDom(VsaDom)(struct let name = "vsadom" end)
 
 module ProduceVsaDom = FlatDomain(struct 
 type t = VsaDom.t -> VsaDom.t
-end)(struct let name = "compute_abstractstore" end)
+end)(struct let name = "compute_vsa_domain" end)
+
+module ProduceAbstractStore = FlatDomain(struct
+  type t = VsaDom.t -> ValueStore.AbstractStore.t
+end)(struct let name = "compute_abstract_store" end)
 
 
 module ProduceBoolDom = FlatDomain(struct 
@@ -408,32 +302,23 @@ let valueset_map ~f:(f:ValueStore.ValueSet.t -> ValueStore.ValueSet.t) (x: Produ
 
 let compute_exp_slot = KB.Class.property ~package:"bap_ai" Theory.Value.cls  ~public:true "exp_value" ProduceValueSet.dom
 
-let compute_bool_slot = KB.Class.property ~package:"bap_ai" Theory.Value.cls ~public:true "exp_bool_value" ProduceBoolean.dom
+let compute_mem_slot = KB.Class.property ~package:"bap_ai" Theory.Value.cls  ~public:true "exp_mem_slot" ProduceAbstractStore.dom
 
-let compute_post_condidtion = KB.Class.property ~package:"bap_ai" Theory.Effect.cls ~public:true "stmt_value" ProduceVsaDom.dom
+let tid_slot = KB.Class.property  ~package:"bap_ai" Theory.Effect.cls ~public:true "tid" (KB.Domain.obj Theory.Program.cls)
 
-let prec_slot = KB.Class.property ~package:"bap_ai" Theory.Program.cls ~public:true "precondition" VsaKBDom.dom
+let precondition = KB.Class.property ~package:"bap_ai" Theory.Program.cls ~public:true "precondition" VsaKBDom.dom
 
+(*to keep convenient we just keep postconditions for effects*)
+let postcondition = KB.Class.property ~package:"bap_ai" Theory.Effect.cls ~public:true "postcondition" VsaKBDom.dom
 
 let known_form_slot = KB.Class.property ~package:"bap_ai" Theory.Value.cls ~public:false "is_known_form" (KB.Domain.flat ~equal:KnownForm.equal ~empty:None "known_form_exp")
 
 
-module Bitv = struct 
+(*let predecessor_slot = KB.Class.property ~package:"bap_ai" Theory.Program.cls ~public:true "predecessors" (KB.Domain.powerset (module Theory.Label) "label_set")*)
 
-end 
+(*ok so the idea here is we collect stuff based on our generated tid*)
 
-
-module GrabValues : Theory.Core = struct 
-  include Theory.Empty
-
-
-(*
-  let blk (lbl: Tid.t) (statements: Theory.data Theory.eff) (jmps: Theory.ctrl Theory.eff) = KB.collect prec_slot lbl >>= fun precond ->
-  *)  
-     
-     (*statements >>= fun stats -> ((KB.Value.get compute_post_condidtion stats):ProduceAbstractStore.t)*)
-end
-
+let fresh = KB.Object.create Theory.Program.cls
 
 
 
@@ -470,64 +355,63 @@ end) = struct
   let value x = KB.Value.get X.target_slot x
 end
 
-module SolvableBooleanExpressions: Theory.Core = struct 
+module SolvableBooleanExpressions = struct 
 include Theory.Empty
 
-include GenericTheoryOps(struct
-type domain = KnownForm.T.t
-let target_slot = known_form_slot
-end)
+  include GenericTheoryOps(struct
+  type domain = KnownForm.T.t
+  let target_slot = known_form_slot
+  end)
+
+
+  let create_atom (kf: KnownForm.t) sort = KB.Value.put known_form_slot (Theory.Value.empty sort) kf |> KB.return
+
+
+  (* Atomics *)
+  let int (sort: 's Theory.Bitv.t Theory.Value.sort) (v: Theory.word) =  create_atom (KnownForm.create_int v (Theory.Bitv.size sort)) sort
+
+  let var (v: 'a Theory.var) = create_atom (KnownForm.create_var v) (Theory.Var.sort v)
+
+  (* Connectives *)
+  let create_connective (conn: KnownForm.connective_op) (b1: KnownForm.t) (b2: KnownForm.t) = Monads.Std.Monad.Option.Syntax.(
+    !$$ (fun b1 b2  -> 
+      KnownForm.Connective (conn, b1, b2)) b1 b2 
+  )
+
+  let handle_bool (conn:  KnownForm.connective_op) (x: Theory.bool) (y: Theory.bool) = (lift2 mk_bv same_sort2  (create_connective conn) x y)
+
+  let and_ (x: Theory.bool) (y: Theory.bool) = handle_bool AND x y
+
+  let or_ x y = handle_bool OR x y
+
+
+  let create_predicate (pred_op: KnownForm.predicate_op) (b1: KnownForm.t) (b2: KnownForm.t) = Monads.Std.Monad.Option.Syntax.(
+    b1 >>= (fun b1 -> b2 >>= fun b2 -> match (b1,b2) with
+      | (Atom x, Atom y) -> Some (KnownForm.Predicate (pred_op,x,y))
+      | _ -> None
+    )
+  )
+
+  let handle_predicate pred_op x y = (lift2 mk_bv bool_sort2 (create_predicate pred_op) x y)
+  (*Predicates*)
+  let neq (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate NEQ x y
+
+  let eq (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate EQ x y
+
+  let slt (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate SLT x y
+
+  let ult (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate ULT x y
+
+
+  let sgt (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate SGT x y
+
+  let ugt  (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate UGT x y
 
 
 
-let create_atom (kf: KnownForm.t) sort = KB.Value.put known_form_slot (Theory.Value.empty sort) kf |> KB.return
+  let sge  (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate SGE x y
 
-
-(* Atomics *)
-let int (sort: 's Theory.Bitv.t Theory.Value.sort) (v: Theory.word) =  create_atom (KnownForm.create_int v (Theory.Bitv.size sort)) sort
-
-let var (v: 'a Theory.var) = create_atom (KnownForm.create_var v) (Theory.Var.sort v)
-
-(* Connectives *)
-let create_connective (conn: KnownForm.connective_op) (b1: KnownForm.t) (b2: KnownForm.t) = Monads.Std.Monad.Option.Syntax.(
-  !$$ (fun b1 b2  -> 
-    KnownForm.Connective (conn, b1, b2)) b1 b2 
-)
-
-let handle_bool (conn:  KnownForm.connective_op) (x: Theory.bool) (y: Theory.bool) = (lift2 mk_bv same_sort2  (create_connective conn) x y)
-
-let and_ (x: Theory.bool) (y: Theory.bool) = handle_bool AND x y
-
-let or_ x y = handle_bool OR x y
-
-
-let create_predicate (pred_op: KnownForm.predicate_op) (b1: KnownForm.t) (b2: KnownForm.t) = Monads.Std.Monad.Option.Syntax.(
-   b1 >>= (fun b1 -> b2 >>= fun b2 -> match (b1,b2) with
-    | (Atom x, Atom y) -> Some (KnownForm.Predicate (pred_op,x,y))
-    | _ -> None
-   )
-)
-
-let handle_predicate pred_op x y = (lift2 mk_bv bool_sort2 (create_predicate pred_op) x y)
-(*Predicates*)
-let neq (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate NEQ x y
-
-let eq (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate EQ x y
-
-let slt (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate SLT x y
-
-let ult (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate ULT x y
-
-
-let sgt (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate SGT x y
-
-let ugt  (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate UGT x y
-
-
-
-let sge  (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate SGE x y
-
-let uge  (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate UGE x y
+  let uge  (x: 'a Theory.bitv) (y: 'a Theory.bitv) = handle_predicate UGE x y
 
 end
 
@@ -667,6 +551,17 @@ end)
   let shiftr  (s: Theory.bool) (x: 's Theory.bitv) (y: 'b Theory.bitv) = binop_same ~f:CircularLinearProgression.shiftr x y*)
   
 
+  
+let exec_cast_on (ctype: cast) (v: ValueStore.ValueSet.t) (target_width: int) = let f = match ctype with 
+| UNSIGNED -> CircularLinearProgression.zero_extend ~width:target_width
+| SIGNED -> CircularLinearProgression.sign_extend ~width:target_width
+| HIGH ->  CircularLinearProgression.shrink_high ~width:target_width (*narrow keeping high bit*)
+| LOW ->  CircularLinearProgression.shrink_low ~width:target_width (*narrow keeping low bits*)
+in
+ValueStore.ValueSet.apply_function ~f:f v
+
+
+
   let append (cst: 'a Theory.Bitv.t Theory.Value.sort) (bv1: 'b Theory.bitv) (bv2: 'c Theory.bitv) = bv1 >>= fun bv1 -> (bv2 >>= fun bv2 -> 
       let b1s = Theory.Value.sort bv1 in 
       let b2s = Theory.Value.sort bv2 in
@@ -691,7 +586,110 @@ end)
     )
 
 
+(**
+
+let denote_def  (d: Def.t) (pred: VsaDom.t) (mp: ValueStore.ALocMap.t): VsaDom.t = 
+  let assignee  = Def.lhs d in
+  let (imms, vs) = pred in 
+  if is_bool assignee then  
+    (Var.Map.set imms ~key:assignee
+    ~data:(denote_exp_as_bool (Def.rhs d) pred) , vs)
+  else
+  (*if we arent updating a boolean *)
+  let denote_def' (pred : ValueStore.AbstractStore.t): ValueStore.AbstractStore.t = 
+    let res_of_expr = denote_expr (Def.rhs d) (imms,pred) mp in 
+    match res_of_expr with 
+      | Value nval -> ValueStore.ALoc.Map.set pred ~key:(ValueStore.ALoc.Var assignee) ~data:nval
+      | NewEnv updated_store -> updated_store
+in (Var.Map.map imms ~f:(fun (t,f) -> denote_def' t,  denote_def' f) , denote_def' vs)
+*)
+
+
+  let variable_is_bool (v: _ Theory.var) = 
+    let s = Theory.Var.sort v in 
+    let b = Theory.Bitv.define 1 in 
+      Theory.Value.Sort.same b s
+
+
+  let get_bool (v: ValueStore.ValueSet.t) =
+     let const_val = ValueStore.ValueSet.get_constants v in
+     if CircularLinearProgression.is_true const_val then
+      `True
+     else if CircularLinearProgression.is_false const_val then
+      `False
+     else
+      `Top
+
+
+      (*
+    Ok first we need to check the inferred value, if it is not top then we can set values accordingly
+      ie. if is always true then (abstore, bot)
+        if always false (bot, abstore)
+
+        otherwise if it a known form we can apply a computation of the known form
+
+          finally we have to give up and say the value of the boolean is (abstore,abstore)
+    
+    *)
+
+  let pure_exp_as_bool (p: _ Theory.Value.t) (pred: VsaDom.t) = 
+    let (immenv, abstore) = pred in 
+    let b_val = (Option.value_exn (value p)) abstore |> get_bool in (* TODO do something about this*) 
+    match b_val with 
+      | `True -> (abstore, ValueStore.AbstractStore.bot)
+      | `False -> (ValueStore.AbstractStore.bot, abstore)
+      | `Top -> 
+        let kf: KnownForm.T.t = SolvableBooleanExpressions.value p in 
+        Option.map ~f:(fun some_kf -> KnownForm.compute_known_form some_kf pred) kf |> Option.value ~default:(abstore,abstore)
   
+
+  let variable_is_mem (v: _ Theory.var) = 
+    let s = Theory.Var.sort v in 
+    let s = Theory.Value.Sort.forget s in
+    Theory.Mem.refine s |> Option.is_some
+
+    
+  let compute_store (v: _ Theory.var) (p: _  Theory.Value.t) (abstore: ValueStore.AbstractStore.t): ValueStore.AbstractStore.t  = 
+    let mem_repr: _ -> ValueStore.AbstractStore.t = KB.Value.get compute_mem_slot p |> Option.value_exn in
+      let next_abstore = mem_repr abstore in
+        next_abstore
+
+
+
+  let compute_exp (v: _ Theory.var) (p: _ Theory.Value.t) (abstore: ValueStore.AbstractStore.t): ValueStore.AbstractStore.t  = 
+    let val_repr: _ -> ValueStore.ValueSet.t = KB.Value.get compute_exp_slot p |> Option.value_exn in
+    let nval = val_repr abstore in 
+      ValueStore.ALoc.Map.set abstore ~key:(aloc_from_theory v) ~data:nval
+
+  let set (v: _ Theory.var) (p: _ Theory.pure) = 
+    let tid_update = 
+      let* tid = fresh in
+      let* pred = KB.collect precondition tid  in 
+      let (bool_env, curr_abstract_store) = pred in
+      let v_aloc = aloc_from_theory v in 
+      let reify_v = Var.reify v in 
+      let is_bool = variable_is_bool v in 
+      let* pval = p in 
+      let post_cond = if is_bool then 
+        (Var.Map.set bool_env ~key:reify_v ~data:(pure_exp_as_bool pval pred), curr_abstract_store)
+      else 
+        (* there are two types of assignments we have to handle assignments into memory and assignments into a normal var*)
+      let denote_def' (astore: ValueStore.AbstractStore.t): ValueStore.AbstractStore.t = if variable_is_mem v then 
+          (* TODO this doesnt work with multiple memories *)
+          compute_store v pval astore
+      else
+        compute_exp v pval astore  in
+
+        (Var.Map.map bool_env ~f:(fun (t,f) -> denote_def' t,  denote_def' f) , denote_def' curr_abstract_store)
+      in
+      let empty_denotation =  (Theory.Effect.empty (Theory.Effect.Sort.data "")) in 
+      let post_cond_denot = KB.Value.put postcondition empty_denotation post_cond in 
+      let add_tid_denot = KB.Value.put tid_slot post_cond_denot tid in
+      KB.return post_cond_denot
+  in
+    tid_update
+
+
 end 
 
 let () =

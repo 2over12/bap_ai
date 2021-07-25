@@ -5,7 +5,7 @@ open Bap_ai
 open Bap_knowledge
 open Knowledge.Syntax
 open OUnit2
-
+open Knowledge.Let
 
 
 type dword
@@ -35,17 +35,20 @@ let attempt_to_create_var = theory >>= (fun vsa ->
 let res_obj = KB.Object.create Theory.Effect.cls
 
 let get_res target = 
-  let empty_state = KB.empty in
-    let n_obj = target >>= (fun ntarget-> 
-      let tv = KB.Value.get Vsa.compute_post_condidtion ntarget in
-      res_obj >>= (fun res_obj -> KB.provide Vsa.compute_post_condidtion res_obj tv >>= (fun _ -> KB.return res_obj))) in
-    KB.run Theory.Effect.cls n_obj empty_state
+    let empty_state = KB.empty in
+    let new_obj = 
+      let* target = target in 
+      let* obj = res_obj in 
+      let tv =  KB.Value.get Vsa.postcondition target in 
+      let* _ = KB.provide Vsa.postcondition obj tv in
+      KB.return obj in 
+    KB.run Theory.Effect.cls new_obj empty_state
 
 let get_unconflicted_res target = Option.value_exn (get_res target |> Result.ok)
 let test_add10 _ = 
   let v, _ = get_unconflicted_res attempt_to_create_var in 
-  let post_cond = KB.Value.get Vsa.compute_post_condidtion v in
-  assert_bool "post_cond is not bottom" (Option.is_none post_cond)
+  let (_bool_env, curr_store) = KB.Value.get Vsa.postcondition v in
+  assert_bool "post_cond is bottom"(ValueStore.AbstractStore.eq ValueStore.AbstractStore.bot curr_store |> not)
 
 
 
