@@ -252,7 +252,7 @@ end) = struct
     | Some _ , None -> KB.Order.GT
     | None, Some _ -> KB.Order.LT
 
-    let dom = KB.Domain.define ~join:(fun x y -> match (x,y) with
+    let dom: T.t option Knowledge.domain = KB.Domain.define ~join:(fun x y -> match (x,y) with
     | None, None -> Result.Ok None
     | Some _, Some _ -> Result.Error FlatDomain
     | Some x, None -> Result.Ok (Some x)
@@ -272,9 +272,6 @@ module ProduceVsaDom = FlatDomain(struct
 type t = VsaDom.t -> VsaDom.t
 end)(struct let name = "compute_vsa_domain" end)
 
-module ProduceAbstractStore = FlatDomain(struct
-  type t = VsaDom.t -> ValueStore.AbstractStore.t
-end)(struct let name = "compute_abstract_store" end)
 
 
 module ProduceBoolDom = FlatDomain(struct 
@@ -286,7 +283,10 @@ module ProduceValueSet = FlatDomain(struct
   type t = ValueStore.AbstractStore.t -> ValueStore.ValueSet.t
 end)(struct let name = "compute_valueset" end)
 
+module ProduceAbstractStore = struct 
+include FlatDomain(struct type t = ValueStore.AbstractStore.t ->  ValueStore.AbstractStore.t end)(struct let name = "produce_value_store" end)
 
+end
 
 module ProduceBoolean = FlatDomain(struct 
   type t = VsaDom.t -> BoolDom.t
@@ -299,10 +299,9 @@ let post_conds = KB.Domain.mapping
 
 let valueset_map ~f:(f:ValueStore.ValueSet.t -> ValueStore.ValueSet.t) (x: ProduceValueSet.t) = Option.map ~f:(fun producer -> fun ctxt -> f (producer ctxt)) x
 
+let compute_exp_slot : (Theory.Value.cls, (ValueStore.AbstractStore.t -> ValueStore.ValueSet.t) option) Knowledge.slot= KB.Class.property ~package:"bap_ai" Theory.Value.cls  ~public:true "exp_value" ProduceValueSet.dom
 
-let compute_exp_slot = KB.Class.property ~package:"bap_ai" Theory.Value.cls  ~public:true "exp_value" ProduceValueSet.dom
-
-let compute_mem_slot = KB.Class.property ~package:"bap_ai" Theory.Value.cls  ~public:true "exp_mem_slot" ProduceAbstractStore.dom
+let compute_mem_slot : (Theory.Value.cls, (ValueStore.AbstractStore.t -> ValueStore.AbstractStore.t) option) Knowledge.slot = KB.Class.property ~package:"bap_ai" Theory.Value.cls  ~public:true "exp_mem_slot" ProduceAbstractStore.dom
 
 let tid_slot = KB.Class.property  ~package:"bap_ai" Theory.Effect.cls ~public:true "tid" (KB.Domain.obj Theory.Program.cls)
 
