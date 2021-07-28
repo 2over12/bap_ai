@@ -48,7 +48,12 @@ let get_unconflicted_res target = Option.value_exn (get_res target |> Result.ok)
 let test_add10 _ = 
   let v, _ = get_unconflicted_res attempt_to_create_var in 
   let (_bool_env, curr_store) = KB.Value.get Vsa.postcondition v in
+  
+  ValueStore.ALoc.Map.iter ~f:(fun vset ->  
+    ValueStore.ValueSet.sexp_of_t vset |> Sexp.to_string |> print_endline
+  ) curr_store ;
   assert_bool "post_cond is bottom"(ValueStore.AbstractStore.eq ValueStore.AbstractStore.bot curr_store |> not)
+  
 
 
 

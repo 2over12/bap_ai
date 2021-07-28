@@ -305,13 +305,11 @@ let compute_mem_slot : (Theory.Value.cls, (ValueStore.AbstractStore.t -> ValueSt
 
 let tid_slot = KB.Class.property  ~package:"bap_ai" Theory.Effect.cls ~public:true "tid" (KB.Domain.obj Theory.Program.cls)
 
-let precondition = KB.Class.property ~package:"bap_ai" Theory.Program.cls ~public:true "precondition" VsaKBDom.dom
-
-(*to keep convenient we just keep postconditions for effects*)
-let postcondition = KB.Class.property ~package:"bap_ai" Theory.Effect.cls ~public:true "postcondition" VsaKBDom.dom
-
 let known_form_slot = KB.Class.property ~package:"bap_ai" Theory.Value.cls ~public:false "is_known_form" (KB.Domain.flat ~equal:KnownForm.equal ~empty:None "known_form_exp")
 
+module Tids = (val KB.Object.derive Theory.Program.cls)
+
+let post_condition_map  = KB.Class.property ~package:"bap_ai" Theory.Program.cls ~public:true "postcondition_map" (KB.Domain.mapping ~equal:Tids.equal )
 
 (*let predecessor_slot = KB.Class.property ~package:"bap_ai" Theory.Program.cls ~public:true "predecessors" (KB.Domain.powerset (module Theory.Label) "label_set")*)
 
@@ -458,7 +456,7 @@ end)
 
   let aloc_from_theory  (v: 'a Theory.var) = (ValueStore.ALoc.Var (Var.reify v))
 
-  let var (v: 'a Theory.var) = mk_bv (Theory.Var.sort v) (Some (fun vstore -> ValueStore.AbstractStore.get vstore (aloc_from_theory v)))
+  let var (v: 'a Theory.var) = mk_bv (Theory.Var.sort v) (Some (fun vstore -> let res = ValueStore.AbstractStore.get vstore (aloc_from_theory v) in ValueStore.ValueSet.print_valueset res;res ))
 
 
   let unk (s: 'a Theory.Value.sort) = mk_bv s (Some (fun _ -> ValueStore.ValueSet.Top))
@@ -682,21 +680,22 @@ in (Var.Map.map imms ~f:(fun (t,f) -> denote_def' t,  denote_def' f) , denote_de
         (Var.Map.map bool_env ~f:(fun (t,f) -> denote_def' t,  denote_def' f) , denote_def' curr_abstract_store)
       in
       let empty_denotation =  (Theory.Effect.empty (Theory.Effect.Sort.data "")) in 
-      let post_cond_denot = KB.Value.put postcondition empty_denotation post_cond in 
-      let add_tid_denot = KB.Value.put tid_slot post_cond_denot tid in
-      KB.return add_tid_denot
+      let add_tid_denot = KB.Value.put tid_slot empty_denotation tid in
+       "setting:" ^ Theory.Var.name v |> print_endline; 
+       "with:" ^ (VsaDom.sexp_of_t post_cond |> Sexp.to_string) |> print_endline;
+       KB.return add_tid_denot
   in
     tid_update
 
   let seq (eff1: 'a Theory.eff) (eff2: 'a Theory.eff) =
   let tid_update = 
     let* tid = fresh in 
+    
     let* pred = KB.collect precondition tid in 
     let* eff1_v = eff1 in 
     let* eff2_v = eff2 in 
     let eff1_tid = KB.Value.get tid_slot eff1_v in 
     let* () = KB.provide precondition eff1_tid pred in
-    let eff1_post_cond = KB.Value.get postcondition eff1_v in 
     let eff2_tid = KB.Value.get tid_slot eff2_v in
     let* () = KB.provide precondition eff2_tid eff1_post_cond in 
     let eff2_post_cond = KB.Value.get postcondition eff2_v in 

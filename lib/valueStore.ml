@@ -66,6 +66,7 @@ module ValueSet = struct
     | Below x -> Option.value ~default:(CircularLinearProgression.bottom ~width:1) (MemoryRegion.Map.find x MemoryRegion.Global)
 
 
+    let print_valueset v = sexp_of_t v |> Sexp.to_string |> print_endline
 end
 
 module AbstractStore = MapDomain.MakeMap(ALoc)(ValueSet)
