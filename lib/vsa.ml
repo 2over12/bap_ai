@@ -1,7 +1,11 @@
 open Core_kernel
 open Bap.Std
-
+open Graphlib.Std
 module VsaDom = ProductDomain.BottomReduction(ImmEnv.BooleanImmediates)(ValueStore.AbstractStore)
+
+module PerExitDom = MapDomain.MakeMap(Tid)(VsaDom)
+open Bap_core_theory
+
 
 let is_bool (v: Var.t) = Var.typ v |> function 
   | Type.Imm x -> Int.equal x 1 
@@ -264,9 +268,10 @@ in (Var.Map.map imms ~f:(fun (t,f) -> denote_def' t,  denote_def' f) , denote_de
 
 type jmp_results = {successors: tid list; take_jmp: VsaDom.t; dont_take: VsaDom.t}
 
-let denote_jmp (jmp : Jmp.t) (pred: VsaDom.t): jmp_results
+let denote_jmp (jmp : Jmp.t) (pred: VsaDom.t): jmp_results = raise (Failure "not implemented yet")
+  
 
-let denote_block (blk: Blk.t) (pred: VsaDom.t) (mp: ValueStore.ALocMap.t): VsaDom.t = 
+let denote_block (blk: Blk.t) (pred: VsaDom.t) ~aloc_mp:(aloc_mp: ValueStore.ALocMap.t): PerExitDom.t = 
   let phi_nodes = Term.enum phi_t blk in 
   assert (Seq.is_empty phi_nodes);
 
@@ -275,6 +280,21 @@ let denote_block (blk: Blk.t) (pred: VsaDom.t) (mp: ValueStore.ALocMap.t): VsaDo
 
   let before_jumps = Seq.fold ~init:pred ~f:(fun new_pred df ->
       
-      denote_def df new_pred mp ) defs in
+      denote_def df new_pred aloc_mp ) defs in
 
   let jmps = Term.enum jmp_t blk in 
+    raise (Failure "not implemented")
+
+
+
+
+  let calulate_block (nd: Graphs.Ir.node) (prev: PerExitDom.t) ~aloc_mp:(aloc_mp: ValueStore.ALocMap.t) =
+    let blk = Graphs.Ir.Node.label nd in 
+    denote_block ~aloc_mp:aloc_mp blk (PerExitDom.get prev (Term.tid blk))
+
+  let step_function curr nd  prev curr = raise (Failure "not implemented") 
+
+
+  let denote_function (proc: Sub.t) ~aloc_mp:(aloc_mp: ValueStore.ALocMap.t): (_, _) Solution.t =
+    let graph = Sub.to_cfg proc in
+    Graphlib.fixpoint (module Graphs.Ir) ~init:(Solution.create Graphs.Ir.Node.Map.empty PerExitDom.bot) ~equal:PerExitDom.equal ~merge:PerExitDom.join ~step:step_function ~f:(calulate_block ~aloc_mp:aloc_mp) graph
