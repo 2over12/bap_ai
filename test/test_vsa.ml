@@ -39,8 +39,13 @@ let create_1_def_block ?jmp_targets:(jmp_targets = []) df  =
 
 
 
-  
+  let func_graph = 
+    let nds = [sum_block;set_x_1_block;set_y_block] in 
+    let nds = List.map ~f:(fun x -> Graphs.Ir.Node.create x) nds in 
+    List.fold ~f:(fun nxt tot -> Graphs.Ir.Node.insert tot nxt ) ~init:Graphs.Ir.empty nds
 
+  
+  let test_sub = Sub.of_cfg func_graph
 
 
 
