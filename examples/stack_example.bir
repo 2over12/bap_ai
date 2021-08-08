@@ -1,0 +1,65 @@
+000009b3: program
+000009ae: sub main(main_argc, main_argv, main_result)
+000009bf: main_argc :: in u32 = RDI
+000009c0: main_argv :: in out u64 = RSI
+000009c1: main_result :: out u32 = RAX
+
+00000333:
+00000338: call @endbr with return %0000033b
+
+0000033b:
+00000343: #31 := RBP
+00000347: RSP := RSP - 8
+0000034b: mem := mem with [RSP, el]:u64 <- #31
+00000354: RBP := RSP
+00000364: #32 := RSP
+00000368: RSP := RSP - 0x20
+0000036c: CF := #32 < 0x20
+00000370: OF := high:1[(#32 ^ 0x20) & (#32 ^ RSP)]
+00000374: AF := 0x10 = (0x10 & (RSP ^ #32 ^ 0x20))
+00000378: PF :=
+          ~low:1[let $1 = RSP >> 4 ^ RSP in
+                 let $2 = $1 >> 2 ^ $1 in $2 >> 1 ^ $2]
+0000037c: SF := high:1[RSP]
+00000380: ZF := 0 = RSP
+00000389: RAX := mem[FS_BASE + 0x28, el]:u64
+00000392: mem := mem with [RBP - 8, el]:u64 <- RAX
+000003a1: RAX := 0
+000003a5: AF := unknown[bits]:u1
+000003a9: ZF := 1
+000003ad: PF := 1
+000003b1: OF := 0
+000003b5: CF := 0
+000003b9: SF := 0
+000003c2: RAX := low:64[RBP - 0x10]
+000003cb: mem := mem with [RBP - 0x18, el]:u64 <- RAX
+000003d4: RAX := mem[RBP - 0x18, el]:u64
+000003dd: mem := mem with [RAX, el]:u32 <- 1
+000003e6: RAX := mem[RBP - 0x18, el]:u64
+000003ef: mem := mem with [RAX + 4, el]:u32 <- 2
+000003f8: RAX := 0
+00000401: RDX := mem[RBP - 8, el]:u64
+00000410: RDX := RDX ^ mem[FS_BASE + 0x28, el]:u64
+00000414: OF := 0
+00000418: CF := 0
+0000041c: AF := unknown[bits]:u1
+00000420: PF :=
+          ~low:1[let $1 = RDX >> 4 ^ RDX in
+                 let $2 = $1 >> 2 ^ $1 in $2 >> 1 ^ $2]
+00000424: SF := high:1[RDX]
+00000428: ZF := 0 = RDX
+00000433: when ZF goto %0000042d
+000009af: goto %0000071f
+
+0000071f:
+00000728: RSP := RSP - 8
+0000072c: mem := mem with [RSP, el]:u64 <- 0x119A
+0000072f: call @endbr@1050 with return %0000042d
+
+0000042d:
+00000441: RSP := RBP
+00000445: RBP := mem[RSP, el]:u64
+00000449: RSP := RSP + 8
+00000454: #36 := mem[RSP, el]:u64
+00000458: RSP := RSP + 8
+0000045b: call #36 with noreturn

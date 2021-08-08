@@ -1,6 +1,7 @@
 open Bap.Std
 open Core_kernel
-
+open OUnit2
+open Bap_ai
 
 let x_var = Var.create "x" (Bil.Types.Imm 32)
 let y_var = Var.create "y" (Bil.Types.Imm 32)
@@ -48,6 +49,9 @@ let create_1_def_block ?jmp_targets:(jmp_targets = []) df  =
   let test_sub = Sub.of_cfg func_graph
 
 
+(*
+let x = Vsa.denote_sub test_sub ValueStore.AbstractStore.bot
+*)
 
 (*let t = 
   let empty_grph = Graphs.Ir.empty in 

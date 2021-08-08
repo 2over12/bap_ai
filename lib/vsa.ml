@@ -295,6 +295,6 @@ let denote_block (blk: Blk.t) (pred: VsaDom.t) ~aloc_mp:(aloc_mp: ValueStore.ALo
   let step_function curr nd  prev curr = raise (Failure "not implemented") 
 
 
-  let denote_function (proc: Sub.t) ~aloc_mp:(aloc_mp: ValueStore.ALocMap.t): (_, _) Solution.t =
+  let denote_sub (proc: Sub.t) ~aloc_mp:(aloc_mp: ValueStore.ALocMap.t): (_, _) Solution.t =
     let graph = Sub.to_cfg proc in
     Graphlib.fixpoint (module Graphs.Ir) ~init:(Solution.create Graphs.Ir.Node.Map.empty PerExitDom.bot) ~equal:PerExitDom.equal ~merge:PerExitDom.join ~step:step_function ~f:(calulate_block ~aloc_mp:aloc_mp) graph
