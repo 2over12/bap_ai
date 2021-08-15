@@ -1,12 +1,52 @@
 open Bap.Std
 open Core_kernel
 
+
+
+(*
+@inproceedings{10.1145/3015135.3015137,
+author = {Feist, Josselin and Mounier, Laurent and Bardin, S\'{e}bastien and David, Robin and Potet, Marie-Laure},
+title = {Finding the Needle in the Heap: Combining Static Analysis and Dynamic Symbolic Execution to Trigger Use-after-Free},
+year = {2016},
+isbn = {9781450348416},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/3015135.3015137},
+doi = {10.1145/3015135.3015137},
+abstract = {This paper presents a fully automated technique to find and trigger Use-After-Free
+vulnerabilities (UAF) on binary code. The approach combines a static analyzer and
+a dynamic symbolic execution engine. We also introduce several original heuristics
+for the dynamic symbolic execution part, speeding up the exploration and making this
+combination effective in practice. The tool we developed is open-source, and it has
+successfully been applied on real world vulnerabilities. As an example, we detail
+a proof-of-concept exploit triggering a previously unknown vulnerability on JasPer
+leading to the CVE-2015-5221.},
+booktitle = {Proceedings of the 6th Workshop on Software Security, Protection, and Reverse Engineering},
+articleno = {2},
+numpages = {12},
+keywords = {dynamic symbolic execution, binary code analysis, vulnerability detection, use-after-free, automated exploit generation},
+location = {Los Angeles, California, USA},
+series = {SSPREW '16}
+}
+
+
+We take an approach similar to this paper where we have a a-locs for unitialized registers
+wherein <init_reg, offset>
+
+
+K. Anand, K. Elwazeer, A. Kotha, M. Smithson, R. Barua and A. Keromytis, "An Accurate Stack Memory Abstraction and Symbolic Analysis Framework for Executables," 2013 IEEE International Conference on Software Maintenance, 2013, pp. 90-99, doi: 10.1109/ICSM.2013.20.
+
+This paper proposes a stack model.
+
+*)
+  
+
 module MemoryRegion = struct 
 
   module T = struct
   type t = 
     | Heap of tid (* abstract allocation *)
-    | Stack of tid (* stack of a procedure *)
+    | Init of Var.t (* stack of a procedure *)
     | Global [@@deriving sexp, compare ]
 
   end 
@@ -24,6 +64,8 @@ module LocationDescription = struct
   include Comparable.Make(T)
   include T
 end
+
+
 
 
 module ALoc = struct 
