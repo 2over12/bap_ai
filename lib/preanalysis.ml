@@ -39,5 +39,26 @@ let collect_non_recursive_functions (prog: Program.t) =
   Seq.filter_map ~f:(fun s -> if is_function_not_recursive s then Some (Term.tid s) else None) (Term.enum sub_t prog)
 
 
+
+let get_store (e: Bil.exp) = 
+  match e with 
+   | Bil.Store (_,_,_,_,_) -> None
+   | _ -> None
+    
+let get_load (e: Bil.exp) = 
+  match e with 
+    | Bil.Load (_,_,_,_) -> None
+    | _ -> None
+    
+
+(*
+let get_stores (proc: Sub.t) = 
+  let blks = Term.enum blk_t proc in
+  let defs =  Seq.concat_map ~f:(fun blk -> Term.enum def_t blk) blks in
+  let 
+
+  *)
+(*
 let get_stack_variables (proc: Sub.t) = 
-  let calls = 
+  let calls = get_calls_from_sub
+  *)
