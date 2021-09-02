@@ -8,12 +8,12 @@
   cfaDomain
   clpDomain
   immEnv
-  memoryDomain
   valueStore
   vsa
   productDomain
   completeLattice
-  preanalysis)
+  preanalysis
+  intervalTreeDomain)
  (libraries bap oseq core_kernel zarith)
  (preprocess
   (pps ppx_jane)))

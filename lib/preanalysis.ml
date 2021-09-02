@@ -30,6 +30,9 @@ let get_calls_from_sub (proc: Sub.t) =
 This function must conservatively claim that a function is not recursive 
 
 In the future perhaps we can use the results of VSA to make better approximations of indirect calls
+
+
+TODO this doesnt work with mutual recursion....
 *)
 let is_function_not_recursive (proc: Sub.t) =
   let calls = get_calls_from_sub proc in

@@ -6,7 +6,8 @@ module MemoryRegion = struct
   module T = struct
   type t = 
     | Heap of tid (* abstract allocation *)
-    | Stack of tid (* stack of a procedure *)
+    | InitReg of Var.t (* symbolic access to uninitialized variable *)
+    | InitMem of Word.t (* symbolic access to unitialized memory*)
     | Global [@@deriving sexp, compare ]
 
   end 
@@ -59,10 +60,27 @@ module ValueSet = struct
 
 end
 
-module AbstractStore = MapDomain.MakeMap(ALoc)(ValueSet)
+module VariableStore = MapDomain.MakeMap(Var)(ValueSet)
 
 
-(*stores results of preanalysis*)
+
+module Offsets = struct 
+    type t = {
+      lower : Word.t;
+      upper : Word.t;
+    } [@@deriving compare, fields,sexp_of]
+      
+    type point = Word.t [@@deriving compare, sexp_of]
+end
+
+module AbstractMemory = IntervalTreeDomain.Make(Offsets)(ValueSet)
+
+
+module MemoryStore  = MapDomain.MakeMap(MemoryRegion)(AbstractMemory)
+
+module AbstractStore = ProductDomain.MakeProductWithReduction(VariableStore)(MemoryStore)
+
+(*
 module ALocMap = struct
   type t = LocationDescription.Set.t MemoryRegion.Map.t * Tid.Set.t
 
@@ -104,3 +122,4 @@ module ALocMap = struct
           )
       )) maybe_vs
 end
+*)
