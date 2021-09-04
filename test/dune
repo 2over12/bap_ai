@@ -1,3 +1,3 @@
 
 
-(tests (names test test_vsa) (libraries bap_ai ounit2 qcheck bap-primus))
+(tests (names test test_vsa test_interval_tree_domain) (libraries bap_ai ounit2 qcheck bap-primus))

@@ -47,12 +47,3 @@ open Graphlib.Std
 open Core_kernel
 
 
-
-module ASADomain
-
-let transfer_function (prev: Graphs.Ir.node) (x: int) = 1
-
-
-let max_stack_diff (proc: Sub.t) =
-  let cfg = Sub.to_cfg proc in 
-  Graphlib.fixpoint (module Graphs.Ir) 

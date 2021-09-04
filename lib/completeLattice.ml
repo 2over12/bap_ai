@@ -10,10 +10,9 @@ module LatFromCPO(X: AbstractDomain.CPO) = struct
 
   module T = struct 
   type t =  | Top 
-            | Below of X.t [@@deriving sexp, compare]
+            | Below of X.t [@@deriving sexp]
   end
 
-  include Comparable.Make(T)
   include T
 
   let fmap (elem:t) ~f:(f: X.t -> 'a) ~default:(default:'a) = match elem with 

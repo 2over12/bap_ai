@@ -11,7 +11,6 @@ module MakeProductWithReduction(X: AbstractDomain.CPO)(Y: AbstractDomain.CPO)(R:
   end) = struct 
 
     include Tuple.Make(X)(Y)
-    include Tuple.Comparable(X)(Y)
     include Tuple.Sexpable(X)(Y)
   
   

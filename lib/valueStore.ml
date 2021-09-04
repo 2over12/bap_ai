@@ -40,23 +40,34 @@ module ALoc = struct
   include T
 end
 
+
+(*
+Maps a MemoryRegion to possible addresses 
+
+*)
 module ValueSet = struct
+
   module VsetCPO = MapDomain.MakeMap(MemoryRegion)(ClpDomain)
-  include CompleteLattice.LatFromCPO(VsetCPO)
-  
+  module VsetLattice = CompleteLattice.LatFromCPO(VsetCPO)
+
+  include VsetLattice
+
  let pairwise_function_inclusive ~f:(f:ClpDomain.t -> ClpDomain.t -> ClpDomain.t) (x: t) (y:t) =
-    match (x,y) with 
-      | (Top,_) -> Top 
-      | (_,Top) -> Top 
+   match (x,y) with 
+      | (Top,_) -> VsetLattice.Top 
+      | (_,Top) -> VsetLattice.Top 
       | (Below x, Below y) -> Below (VsetCPO.pairwise_function_inclusive ~f:f x y)
 
 
- let apply_function ~f:(f: ClpDomain.t -> ClpDomain.t) = fmap ~default:Top ~f:(fun x -> 
-  Below (MemoryRegion.Map.map ~f:f x))
+ let apply_function ~f:(f: ClpDomain.t -> ClpDomain.t) = VsetLattice.fmap ~default:VsetLattice.Top ~f:(fun x -> 
+  VsetLattice.Below (MemoryRegion.Map.map ~f:f x))
 
  let abstract_constant (w: word) = 
   (let v = CircularLinearProgression.abstract_single_value ~width:(Word.bitwidth w) (Word.to_int64 w |> Stdlib.Result.get_ok |> Z.of_int64) in
-  Below (MemoryRegion.Map.of_alist_exn [(MemoryRegion.Global,v)]))
+  VsetLattice.Below (MemoryRegion.Map.of_alist_exn [(MemoryRegion.Global,v)]))
+
+
+
 
 end
 
@@ -78,7 +89,8 @@ module AbstractMemory = IntervalTreeDomain.Make(Offsets)(ValueSet)
 
 module MemoryStore  = MapDomain.MakeMap(MemoryRegion)(AbstractMemory)
 
-module AbstractStore = ProductDomain.MakeProductWithReduction(VariableStore)(MemoryStore)
+module AbstractStore = ProductDomain.MakeProduct(VariableStore)(MemoryStore)
+
 
 (*
 module ALocMap = struct

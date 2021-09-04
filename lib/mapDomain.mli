@@ -1,4 +1,7 @@
-module MakeMap(X: AbstractDomain.SET)(Y: AbstractDomain.CPO): sig 
+open Core_kernel
+
+
+module MakeMap(X: Comparable)(Y: AbstractDomain.CPO): sig 
     include AbstractDomain.CPO with type t = Y.t X.Map.t
 
 
